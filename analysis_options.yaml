@@ -1,0 +1,28 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # 未使用的 import / 局部变量在本项目按 warning 处理，CI 要求 0 warning。
+    unused_import: warning
+    unused_local_variable: warning
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # T01 验收明确要求的两条
+    prefer_const_constructors: true
+    require_trailing_commas: true
+
+    # 与架构 §8 约定配套的补充规则
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_final_locals: true
+    avoid_empty_else: true
+    always_declare_return_types: true
+    directives_ordering: true
+    unnecessary_parenthesis: true
+    unnecessary_late: true
+    use_super_parameters: true
+    sort_child_properties_last: true

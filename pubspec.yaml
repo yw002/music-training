@@ -1,0 +1,44 @@
+name: interval_ear
+description: 音程听辨训练
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_soloud: ^4.1.4
+  flutter_bloc: ^9.1.1
+  equatable: ^2.1.0
+  path_provider: ^2.1.6
+  flutter_animate: ^4.5.2
+  share_plus: ^13.3.0
+  file_selector: ^1.1.0
+  cupertino_icons: ^1.0.8
+  window_manager: ^0.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  # 字体段：待用户提供 Inter Latin 子集后启用（架构 §0.3 方案 A）。
+  # 启用时同步把 typography.dart 的 kLatinFontFamily 改为 'Inter'，其余代码零改动。
+  # fonts:
+  #   - family: Inter
+  #     fonts:
+  #       - asset: assets/fonts/Inter-Regular.ttf
+  #         weight: 400
+  #       - asset: assets/fonts/Inter-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Inter-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Inter-Bold.ttf
+  #         weight: 700

@@ -1,0 +1,648 @@
+%% 音程听辨训练 App —— 类图汇总
+%% 源文档：docs/ARCHITECTURE-架构设计与任务分解.md §3
+%% 共 5 张：3.1 领域模型 / 3.2 统计模型 / 3.3 出题与会话服务 / 3.4 音频服务 / 3.5 仓储接口
+
+%% ──────── 类图 1 ────────
+classDiagram
+    class IntervalId {
+        <<enumeration>>
+        p1 m2 M2 m3 M3 P4 TT P5 m6 M6 m7 M7 P8
+        +String storageId
+    }
+
+    class MusicInterval {
+        +IntervalId id
+        +int semitones
+        +String nameZh
+        +String shorthand
+        +int sortOrder
+        +bool trainable
+        +String description
+    }
+
+    class IntervalCatalog {
+        <<static>>
+        +List~MusicInterval~ all
+        +List~MusicInterval~ trainable
+        +MusicInterval of(IntervalId id)$
+        +MusicInterval bySemitones(int n)$
+        +IntervalId? fromStorageId(String s)$
+    }
+
+    class PlaybackDirection {
+        <<enumeration>>
+        ascending descending harmonic
+    }
+    class DirectionMode {
+        <<enumeration>>
+        ascending descending harmonic randomMixed
+    }
+    class RootMode {
+        <<enumeration>>
+        fixed limitedRandom fullRandom
+    }
+    class Timbre {
+        <<enumeration>>
+        keyboard plucked
+        +String labelZh
+    }
+    class TimbreMode {
+        <<enumeration>>
+        keyboard plucked random
+    }
+    class AnswerMode {
+        <<enumeration>>
+        allIntervals enabledOnly binary
+    }
+    class TrainingMode {
+        <<enumeration>>
+        daily free binaryDrill extraDrill
+    }
+    class QuestionBucket {
+        <<enumeration>>
+        weakPair recentWrong spacedReview randomProbe warmUp
+    }
+
+    class IntervalQuestion {
+        +String questionId
+        +IntervalId correctInterval
+        +int rootMidiNote
+        +int targetMidiNote
+        +PlaybackDirection direction
+        +Timbre timbre
+        +RootMode rootMode
+        +List~IntervalId~ answerOptions
+        +DateTime createdAt
+        +QuestionBucket bucket
+        +int semitones()
+        +IntervalQuestion copyWith()
+    }
+
+    class TrainingAttempt {
+        +String attemptId
+        +String sessionId
+        +String questionId
+        +IntervalId correctInterval
+        +IntervalId? selectedInterval
+        +bool isUncertain
+        +bool isCorrect
+        +int replayCount
+        +Duration responseDuration
+        +PlaybackDirection direction
+        +Timbre timbre
+        +RootMode rootMode
+        +int rootMidiNote
+        +AnswerMode answerMode
+        +QuestionBucket bucket
+        +Duration feedbackDwell
+        +DateTime createdAt
+        +bool firstPlayCorrect()
+    }
+
+    class TrainingSession {
+        +String sessionId
+        +TrainingMode trainingMode
+        +DateTime startedAt
+        +DateTime? finishedAt
+        +int totalQuestions
+        +int completedQuestions
+        +int correctCount
+        +int uncertainCount
+        +int extraDrillCount
+        +int maxCombo
+        +TrainingConfig configSnapshot
+        +IntervalPair? focusPair
+        +bool isFinished()
+    }
+
+    class TrainingConfig {
+        +Set~IntervalId~ enabledIntervals
+        +DirectionMode direction
+        +RootMode rootMode
+        +TimbreMode timbreMode
+        +int questionCount
+        +Duration noteGap
+        +bool allowReplay
+        +AnswerMode answerMode
+        +Duration noteDuration
+        +ValidationResult validate()
+        +TrainingConfig copyWith()
+    }
+
+    class IntervalPair {
+        +IntervalId a
+        +IntervalId b
+        +String key()
+        +IntervalPair normalized()
+    }
+
+    class CoursePreset {
+        +String id
+        +String nameZh
+        +Set~IntervalId~ intervals
+        +TrainingConfig toConfig(TrainingConfig base)
+    }
+
+    MusicInterval --> IntervalId
+    IntervalCatalog o-- MusicInterval
+    IntervalQuestion --> IntervalId
+    IntervalQuestion --> PlaybackDirection
+    IntervalQuestion --> Timbre
+    IntervalQuestion --> RootMode
+    IntervalQuestion --> QuestionBucket
+    TrainingAttempt --> IntervalId
+    TrainingAttempt --> PlaybackDirection
+    TrainingAttempt --> Timbre
+    TrainingAttempt --> RootMode
+    TrainingAttempt --> AnswerMode
+    TrainingSession --> TrainingMode
+    TrainingSession --> TrainingConfig
+    TrainingSession --> IntervalPair
+    TrainingConfig --> DirectionMode
+    TrainingConfig --> RootMode
+    TrainingConfig --> TimbreMode
+    TrainingConfig --> AnswerMode
+    CoursePreset --> TrainingConfig
+
+%% ──────── 类图 2 ────────
+classDiagram
+    class AccuracyBucket {
+        +int total
+        +int correct
+        +int firstPlayCorrect
+        +int uncertain
+        +int replays
+        +int totalResponseMs
+        +double accuracy()
+        +double firstPlayAccuracy()
+        +double avgReplays()
+        +double avgResponseMs()
+        +AccuracyBucket merge(AccuracyBucket o)
+        +AccuracyBucket withAttempt(TrainingAttempt a)
+    }
+
+    class IntervalStatistics {
+        +IntervalId interval
+        +int totalCount
+        +int correctCount
+        +int firstPlayCorrectCount
+        +int replayCount
+        +int uncertainCount
+        +int totalResponseMs
+        +DateTime? lastSeenAt
+        +Map~PlaybackDirection,AccuracyBucket~ byDirection
+        +Map~RootMode,AccuracyBucket~ byRootMode
+        +Map~Timbre,AccuracyBucket~ byTimbre
+        +double masteryScore
+        +double averageResponseDuration()
+        +IntervalId? mostConfusedWith
+    }
+
+    class ConfusionMatrix {
+        -Map~IntervalId,Map~IntervalId,int~~ _counts
+        +void increment(IntervalId actual, IntervalId selected)
+        +int countOf(IntervalId actual, IntervalId selected)
+        +int rowTotal(IntervalId actual)
+        +int maxCount()
+        +List~ConfusionEntry~ topEntries(int k)
+        +List~IntervalPair~ topPairs(int k)
+        +Map~String,dynamic~ toJson()
+        +ConfusionMatrix fromJson(Map json)$
+    }
+
+    class ConfusionEntry {
+        +IntervalId actual
+        +IntervalId selected
+        +int count
+    }
+
+    class DimensionStatistics {
+        +Map~PlaybackDirection,AccuracyBucket~ byDirection
+        +Map~RootMode,AccuracyBucket~ byRootMode
+        +Map~Timbre,AccuracyBucket~ byTimbre
+    }
+
+    class DailySummary {
+        +String dateKey
+        +int questionCount
+        +int correctCount
+        +int sessionCount
+        +int totalResponseMs
+    }
+
+    class PairStatistics {
+        +IntervalPair pair
+        +int total
+        +int correct
+        +Map~IntervalId,int~ answerDistribution
+        +List~int~ recentOutcomes
+    }
+
+    class RecentOutcome {
+        +IntervalId correctInterval
+        +IntervalId? selectedInterval
+        +bool isCorrect
+        +bool isUncertain
+        +DateTime at
+    }
+
+    class StatsSnapshot {
+        +int schemaVersion
+        +DateTime updatedAt
+        +int totalAttempts
+        +Map~IntervalId,IntervalStatistics~ intervalStats
+        +ConfusionMatrix confusionMatrix
+        +DimensionStatistics overall
+        +Map~String,DailySummary~ dailySummaries
+        +List~RecentOutcome~ recentOutcomes
+        +Map~String,PairStatistics~ binaryModeStats
+        +StatsSnapshot withAttempt(TrainingAttempt a)
+        +StatsSnapshot empty()$
+    }
+
+    class MasteryCalculator {
+        <<static>>
+        +double compute(IntervalStatistics s)$
+        +MasteryBand band(double score, int sampleCount)$
+    }
+    class MasteryBand {
+        <<enumeration>>
+        insufficient needsWork unstable mastered
+    }
+
+    class ConfusionAnalyzer {
+        +List~WeakPair~ rankPairs(StatsSnapshot s, int k)
+        +List~IntervalPair~ defaultPairs()$
+    }
+    class WeakPair {
+        +IntervalPair pair
+        +double score
+        +int confusionCount
+        +double mastery
+        +MasteryBand band
+    }
+
+    class StreakCalculator {
+        <<static>>
+        +int currentStreak(Map~String,DailySummary~ d, DateTime today)$
+        +List~DailySummary~ last7Days(Map d, DateTime today)$
+    }
+
+    IntervalStatistics o-- AccuracyBucket
+    DimensionStatistics o-- AccuracyBucket
+    ConfusionMatrix o-- ConfusionEntry
+    StatsSnapshot o-- IntervalStatistics
+    StatsSnapshot o-- ConfusionMatrix
+    StatsSnapshot o-- DimensionStatistics
+    StatsSnapshot o-- DailySummary
+    StatsSnapshot o-- RecentOutcome
+    StatsSnapshot o-- PairStatistics
+    MasteryCalculator ..> IntervalStatistics
+    MasteryCalculator ..> MasteryBand
+    ConfusionAnalyzer ..> StatsSnapshot
+    ConfusionAnalyzer ..> WeakPair
+    StreakCalculator ..> DailySummary
+
+%% ──────── 类图 3 ────────
+classDiagram
+    class FrequencyCalculator {
+        <<static>>
+        +double frequencyOf(int midiNote)$
+        +String noteName(int midiNote)$
+    }
+
+    class RootWindow {
+        +int lo
+        +int hi
+        +bool contains(int midi)
+        +int clamp(int midi)
+    }
+
+    class RootNoteGenerator {
+        -Random _random
+        +RootNoteGenerator(Random random)
+        +RootWindow windowFor(Set~IntervalId~ candidates, PlaybackDirection dir)$
+        +int generate(RootMode mode, RootWindow w, int? avoidMidi)
+        +int targetOf(int root, int semitones, PlaybackDirection dir)$
+    }
+
+    class AnswerOptionBuilder {
+        -Random _random
+        +List~IntervalId~ build(IntervalId correct, Set~IntervalId~ pool, AnswerMode mode, int maxOptions)
+    }
+
+    class BinaryAnswerBalancer {
+        -int maxRun
+        -double targetRatio
+        -double strength
+        -int _countA
+        -int _countB
+        -IntervalId? _last
+        -int _runLength
+        +IntervalId next(Random rng, IntervalId a, IntervalId b)
+        +void reset()
+        +double ratioA()
+    }
+
+    class QuestionGenerator {
+        -Random _random
+        -RootNoteGenerator _rootGen
+        -AnswerOptionBuilder _optionBuilder
+        -BinaryAnswerBalancer _balancer
+        +QuestionGenerator(Random random)
+        +IntervalQuestion generate(TrainingConfig cfg, IntervalId forced, QuestionBucket bucket, IntervalQuestion? previous)
+        +IntervalQuestion generateBinary(TrainingConfig cfg, IntervalPair pair, QuestionBucket bucket, IntervalQuestion? previous)
+        -PlaybackDirection _resolveDirection(DirectionMode m)
+        -Timbre _resolveTimbre(TimbreMode m)
+    }
+
+    class PlannedQuestion {
+        +IntervalId interval
+        +QuestionBucket bucket
+        +IntervalPair? focusPair
+    }
+
+    class AdaptiveQuestionPlanner {
+        -Random _random
+        -ConfusionAnalyzer _analyzer
+        +List~PlannedQuestion~ planDaily(StatsSnapshot stats, TrainingConfig cfg)
+        +List~PlannedQuestion~ planFree(TrainingConfig cfg)
+        +List~PlannedQuestion~ planBinary(IntervalPair pair, int count)
+        +BucketQuota quotaFor(int n)$
+    }
+    class BucketQuota {
+        +int weakPair
+        +int recentWrong
+        +int spacedReview
+        +int randomProbe
+    }
+
+    class SessionRunner {
+        -TrainingConfig _config
+        -List~PlannedQuestion~ _plan
+        -QuestionGenerator _generator
+        -List~TrainingAttempt~ _attempts
+        +int index
+        +int correctCount
+        +int combo
+        +int maxCombo
+        +int extraDrillCount
+        +IntervalQuestion? current
+        +SessionSegment segment
+        +IntervalQuestion advance()
+        +TrainingAttempt submit(IntervalId? selected, bool uncertain, int replays, Duration elapsed)
+        +void insertExtraDrill(IntervalPair pair)
+        +bool get isFinished
+        +TrainingSession toSession()
+    }
+    class SessionSegment {
+        <<enumeration>>
+        warmUp weakFocus mixedProbe
+    }
+
+    QuestionGenerator --> RootNoteGenerator
+    QuestionGenerator --> AnswerOptionBuilder
+    QuestionGenerator --> BinaryAnswerBalancer
+    QuestionGenerator ..> IntervalQuestion
+    RootNoteGenerator ..> RootWindow
+    AdaptiveQuestionPlanner --> ConfusionAnalyzer
+    AdaptiveQuestionPlanner ..> PlannedQuestion
+    AdaptiveQuestionPlanner ..> BucketQuota
+    SessionRunner --> QuestionGenerator
+    SessionRunner o-- PlannedQuestion
+    SessionRunner ..> TrainingAttempt
+    SessionRunner ..> SessionSegment
+
+%% ──────── 类图 4 ────────
+classDiagram
+    class AudioSequenceSpec {
+        +int rootMidiNote
+        +int targetMidiNote
+        +PlaybackDirection direction
+        +Timbre timbre
+        +Duration noteDuration
+        +Duration noteGap
+        +double gain
+        +String cacheKey()
+        +AudioSequenceSpec fromQuestion(IntervalQuestion q, Duration gap)$
+        +AudioSequenceSpec withInterval(IntervalId other)
+    }
+
+    class AudioEventType {
+        <<enumeration>>
+        sequenceStart noteStart noteEnd segmentStart sequenceEnd cancelled error
+    }
+
+    class AudioPlaybackEvent {
+        +AudioEventType type
+        +int playbackId
+        +int noteIndex
+        +int segmentIndex
+        +Duration position
+        +Duration noteDuration
+        +Timbre timbre
+        +String? errorMessage
+    }
+
+    class AudioTimelineMark {
+        +Duration at
+        +AudioEventType type
+        +int noteIndex
+        +int segmentIndex
+        +Duration noteDuration
+    }
+    class AudioTimeline {
+        +Duration total
+        +List~AudioTimelineMark~ marks
+    }
+
+    class AudioService {
+        <<interface>>
+        +Future~void~ initialize()
+        +bool get isAvailable
+        +bool get isPlaying
+        +int get currentPlaybackId
+        +Stream~AudioPlaybackEvent~ get events
+        +Future~int~ playSequence(AudioSequenceSpec spec)
+        +Future~int~ playComparison(List~AudioSequenceSpec~ specs, Duration gapBetween)
+        +Future~void~ playSfx(SfxId id)
+        +Future~void~ stop()
+        +Future~void~ preload(Iterable~AudioSequenceSpec~ specs)
+        +void setMasterVolume(double v)
+        +Future~void~ dispose()
+    }
+
+    class SoLoudAudioService {
+        -AudioPlayerBackend _backend
+        -AudioBufferCache _cache
+        -Ticker _ticker
+        -int _playbackId
+        -AudioTimeline? _timeline
+        -int _nextMarkIndex
+        -Object? _handle
+        -Stopwatch _fallbackClock
+        -Queue~SfxId~ _pendingSfx
+        -void _onTick(Duration _)
+        -void _cancelCurrent()
+    }
+
+    class AudioPlayerBackend {
+        <<interface>>
+        +Future~void~ init(int sampleRate, int bufferSize)
+        +Future~LoadedAudio~ load(String key, Uint8List wav)
+        +Future~void~ unload(LoadedAudio a)
+        +PlayingVoice playSource(LoadedAudio a, double volume)
+        +Duration positionOf(PlayingVoice v)
+        +bool isAlive(PlayingVoice v)
+        +Future~void~ stopVoice(PlayingVoice v)
+        +void setGlobalVolume(double v)
+        +Future~void~ shutdown()
+    }
+    class SoLoudAudioBackend
+    class LoadedAudio {
+        +Object token
+        +Duration length
+    }
+    class PlayingVoice {
+        +Object token
+    }
+
+    class PcmSynthesizer {
+        <<static>>
+        +Float32List renderNote(int midi, Timbre t, int durationMs, int sampleRate)$
+    }
+    class SequenceBuilder {
+        <<static>>
+        +SequenceRender build(AudioSequenceSpec spec)$
+        +SequenceRender buildComparison(List~AudioSequenceSpec~ specs, Duration gap)$
+    }
+    class SequenceRender {
+        +Uint8List wav
+        +AudioTimeline timeline
+    }
+    class WavEncoder {
+        <<static>>
+        +Uint8List encodeMono16(Float32List samples, int sampleRate)$
+    }
+    class AudioBufferCache {
+        -LruMap~String,Float32List~ _notes
+        -LruMap~String,SequenceRender~ _sequences
+        -LruMap~String,LoadedAudio~ _loaded
+        +Future~SequenceRender~ getOrBuild(AudioSequenceSpec spec)
+        +void clear()
+    }
+    class EnvelopeSampler {
+        <<static>>
+        +double amplitudeAt(Timbre t, double msSinceNoteStart)$
+    }
+    class FakeAudioService
+
+    AudioService <|.. SoLoudAudioService
+    AudioService <|.. FakeAudioService
+    SoLoudAudioService --> AudioPlayerBackend
+    SoLoudAudioService --> AudioBufferCache
+    SoLoudAudioService ..> AudioTimeline
+    SoLoudAudioService ..> AudioPlaybackEvent
+    AudioPlayerBackend <|.. SoLoudAudioBackend
+    AudioPlayerBackend ..> LoadedAudio
+    AudioPlayerBackend ..> PlayingVoice
+    AudioBufferCache ..> SequenceBuilder
+    SequenceBuilder ..> PcmSynthesizer
+    SequenceBuilder ..> WavEncoder
+    SequenceBuilder ..> SequenceRender
+    AudioTimeline o-- AudioTimelineMark
+
+%% ──────── 类图 5 ────────
+classDiagram
+    class SettingsRepository {
+        <<interface>>
+        +Future~AppSettings~ load()
+        +Future~void~ save(AppSettings s)
+        +Future~TrainingConfig~ loadLastFreeConfig()
+        +Future~void~ saveLastFreeConfig(TrainingConfig c)
+        +Future~WindowGeometry?~ loadWindowGeometry()
+        +Future~void~ saveWindowGeometry(WindowGeometry g)
+    }
+
+    class TrainingRepository {
+        <<interface>>
+        +Future~void~ startSession(TrainingSession s)
+        +Future~void~ recordAttempt(TrainingAttempt a)
+        +Future~void~ finishSession(TrainingSession s)
+        +Future~StatsSnapshot~ loadStats()
+        +Stream~StatsSnapshot~ get statsChanges
+        +Future~List~TrainingSession~~ recentSessions(int limit)
+        +Future~List~TrainingAttempt~~ attemptsInRange(DateTime from, DateTime to)
+        +Future~RecoveryReport?~ takeRecoveryReport()
+        +Future~void~ clearAll()
+        +Future~String~ exportJson()
+        +Future~void~ flush()
+    }
+
+    class TrainingRepositoryImpl {
+        -JsonFileStore _statsFile
+        -JsonlAppender _attempts
+        -JsonlAppender _sessions
+        -StatsStore _stats
+    }
+    class SettingsRepositoryImpl {
+        -JsonFileStore _file
+    }
+    class JsonFileStore {
+        +Future~Map?~ read(String name)
+        +Future~void~ writeAtomic(String name, Map json)
+        +Future~void~ backupCorrupt(String name)
+    }
+    class JsonlAppender {
+        +Future~void~ append(String shard, Map line)
+        +Future~JsonlReadResult~ readAll()
+        +Future~void~ deleteAll()
+        +Future~void~ flush()
+    }
+    class JsonlReadResult {
+        +List~Map~ lines
+        +int skippedLines
+    }
+    class StatsStore {
+        -StatsSnapshot _snapshot
+        +StatsSnapshot get snapshot
+        +void applyAttempt(TrainingAttempt a)
+        +Future~void~ persist()
+        +Future~StatsSnapshot~ rebuildFromAttempts(List~TrainingAttempt~ all)
+    }
+    class RecoveryReport {
+        +int skippedAttemptLines
+        +bool statsRebuilt
+        +int recoveredAttempts
+        +List~String~ corruptFiles
+    }
+    class AppSettings {
+        +Timbre defaultTimbre
+        +Duration defaultNoteGap
+        +double volume
+        +bool feedbackSoundEnabled
+        +bool autoNext
+        +Duration autoNextDelay
+        +bool showSemitoneCount
+        +bool showIntervalShorthand
+        +ThemeMode themeMode
+        +MotionPreference motionPreference
+        +VisualizerStyle visualizerStyle
+        +CelebrationLevel celebrationLevel
+        +bool hapticsEnabled
+        +bool announcePlayback
+        +AppSettings defaults()$
+        +AppSettings copyWith()
+    }
+
+    SettingsRepository <|.. SettingsRepositoryImpl
+    TrainingRepository <|.. TrainingRepositoryImpl
+    TrainingRepositoryImpl --> JsonFileStore
+    TrainingRepositoryImpl --> JsonlAppender
+    TrainingRepositoryImpl --> StatsStore
+    SettingsRepositoryImpl --> JsonFileStore
+    JsonlAppender ..> JsonlReadResult
+    StatsStore ..> StatsSnapshot
+    TrainingRepository ..> RecoveryReport
+    SettingsRepository ..> AppSettings
+

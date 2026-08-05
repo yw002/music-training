@@ -1,0 +1,197 @@
+%% 音程听辨训练 App —— 时序图汇总
+%% 源文档：docs/ARCHITECTURE-架构设计与任务分解.md §4
+%% 共 3 张：4.1 单题生命周期 / 4.2 交替对比播放 / 4.3 自适应组卷
+
+%% ──────── 时序图 1 ────────
+sequenceDiagram
+    autonumber
+    participant UI as TrainingPage<br/>(Widget)
+    participant Cubit as TrainingCubit
+    participant Runner as SessionRunner
+    participant Gen as QuestionGenerator
+    participant Root as RootNoteGenerator
+    participant Opt as AnswerOptionBuilder
+    participant Seq as SequenceBuilder
+    participant Audio as AudioService<br/>(SoLoud)
+    participant Cache as AudioBufferCache
+    participant Repo as TrainingRepository
+
+    Note over UI,Repo: ── 阶段 A：进入训练页，初始化 ──
+    UI->>Cubit: start(TrainingConfig)
+    Cubit->>Repo: loadStatsSnapshot()
+    Repo-->>Cubit: StatsSnapshot
+    Cubit->>Runner: build(config, snapshot)
+    Runner->>Gen: planSession(config, snapshot)
+    Gen-->>Runner: List~IntervalQuestion~ (20题)
+    Runner-->>Cubit: SessionSegment(questions)
+    Cubit->>Audio: preload(sfxKeys)
+    Cubit-->>UI: state = TrainingState.ready(q1)
+
+    Note over UI,Repo: ── 阶段 B：出题（每题重复） ──
+    Cubit->>Gen: nextQuestion()
+    Gen->>Root: pickRoot(intervalId, direction, config.rootMode)
+    Root->>Root: 音域保护 C3–C6，<br/>确保 root+semitones 不越界
+    Root-->>Gen: rootMidi:int
+    Gen->>Opt: buildOptions(correctId, mode, history)
+    Note right of Opt: 二选一时调用<br/>BinaryAnswerBalancer<br/>保证左右分布均衡
+    Opt-->>Gen: List~IntervalId~ (选项)
+    Gen-->>Cubit: IntervalQuestion
+
+    Note over UI,Repo: ── 阶段 C：合成并播放 ──
+    Cubit->>Seq: buildQuestion(question, timbre, playMode)
+    Seq->>Seq: FrequencyCalculator.midiToHz()<br/>×2 个音
+    Seq->>Cache: get(cacheKey)
+    alt 缓存命中
+        Cache-->>Seq: Uint8List (WAV)
+    else 缓存未命中
+        Seq->>Seq: PcmSynthesizer.render()<br/>(Keyboard / Plucked)
+        Seq->>Seq: 单缓冲混合：<br/>旋律=前后拼接 / 和声=逐样本相加
+        Seq->>Seq: WavEncoder.encode()<br/>44100Hz/16bit/mono
+        Seq->>Cache: put(cacheKey, bytes)
+    end
+    Seq-->>Cubit: SequenceRender{bytes, AudioTimeline}
+    Cubit->>Audio: playSequence(render)
+    Audio->>Audio: loadMem() + play()
+    Audio-->>Cubit: playbackId:int
+
+    loop Ticker 每帧轮询（仅播放中）
+        Audio->>Audio: getPosition(handle)
+        Audio-->>Cubit: AudioPlaybackEvent<br/>{playbackId, markIndex, progress}
+        Cubit-->>UI: state.vizPhase 更新
+        UI->>UI: 呼吸光环 / 频谱粒子重绘<br/>（数据来自 EnvelopeSampler，非 FFT）
+    end
+    Audio-->>Cubit: AudioPlaybackEvent(completed)
+
+    Note over UI,Repo: ── 阶段 D：作答与判定 ──
+    UI->>Cubit: submitAnswer(selectedId)  /  submitUncertain()
+    Cubit->>Cubit: isCorrect = selectedId == question.intervalId
+    Cubit->>Cubit: 构造 TrainingAttempt<br/>{questionId, selected, correct,<br/>elapsedMs, isUncertain}
+    Cubit-)Repo: recordAttempt(attempt)
+    Note right of Repo: 异步 JSONL 追加，<br/>UI 不 await
+    Cubit-->>UI: state = answered(result)
+
+    alt 答对
+        UI->>UI: M-15 庆祝（阻塞 ≤180ms）
+        UI->>Audio: playSfx(correct)
+    else 答错
+        UI->>UI: M-16 + M-17 错题面板入场（420ms）
+        UI->>UI: 解锁真实音高 → 半音尺 M-18
+    end
+
+    Note over UI,Repo: ── 阶段 E：推进 ──
+    UI->>Cubit: next()
+    alt 还有题
+        Cubit->>Gen: nextQuestion()
+        Note right of Cubit: 回到阶段 B
+    else 本组结束
+        Cubit->>Repo: finishSession(TrainingSession)
+        Repo->>Repo: JSONL 追加 session +<br/>增量更新 stats.json
+        Cubit-->>UI: state = finished(summary)
+        UI->>UI: 导航到 SessionSummaryPage（M-02）
+    end
+
+%% ──────── 时序图 2 ────────
+sequenceDiagram
+    autonumber
+    participant UI as WrongAnswerPanel
+    participant Cubit as TrainingCubit
+    participant Seq as SequenceBuilder
+    participant Synth as PcmSynthesizer
+    participant Cache as AudioBufferCache
+    participant Audio as AudioService
+    participant Ruler as SemitoneRulerPainter
+
+    UI->>Cubit: playComparison()
+    Note over Cubit: selected = 用户选的错音程<br/>correct = 正确音程<br/>两者共用同一 rootMidi
+
+    Cubit->>Seq: buildComparison(question, selectedId)
+    Seq->>Seq: 构造 4 段序列：<br/>[错, 对, 错, 对]<br/>段间 gap = 320ms
+
+    loop 4 段
+        Seq->>Cache: get(segmentKey)
+        alt 未命中
+            Seq->>Synth: render(freqPair, timbre)
+            Synth-->>Seq: Float32List PCM
+            Seq->>Cache: put(segmentKey, ...)
+        end
+    end
+
+    Seq->>Seq: 拼接为单一 PCM 缓冲<br/>+ 生成 AudioTimeline：<br/>mark[0..3] = 各段起点<br/>label = wrong/correct/wrong/correct
+    Seq->>Seq: WavEncoder.encode()
+    Seq-->>Cubit: SequenceRender{bytes, timeline}
+
+    Cubit->>Audio: playSequence(render)
+    Audio-->>Cubit: playbackId
+
+    loop 每帧
+        Audio-->>Cubit: AudioPlaybackEvent{markIndex}
+        alt markIndex 变化
+            Cubit-->>UI: state.comparePhase = timeline.mark[i].label
+            UI->>Ruler: highlight(wrong | correct)
+            Note right of Ruler: M-18 半音尺：<br/>错误音程条 → 灰<br/>正确音程条 → 高亮 + 发光
+            UI->>UI: A/B 按钮同步高亮（M-19）
+        end
+    end
+
+    Audio-->>Cubit: completed
+    Cubit-->>UI: comparePhase = idle
+    UI->>Ruler: 回到静态终态<br/>（两条都可见，正确的更亮）
+
+    Note over UI,Ruler: 「减弱动效」开启时：<br/>跳过逐帧高亮，播放照旧，<br/>半音尺直接显示终态（验收 A4）
+
+%% ──────── 时序图 3 ────────
+sequenceDiagram
+    autonumber
+    participant UI as HomePage
+    participant HC as HomeCubit
+    participant Repo as TrainingRepository
+    participant Stats as StatsStore
+    participant Mastery as MasteryCalculator
+    participant Planner as AdaptiveQuestionPlanner
+    participant Gen as QuestionGenerator
+    participant Rand as Random(seed)
+
+    UI->>HC: load()
+    HC->>Repo: loadStatsSnapshot()
+    Repo->>Stats: read()
+    alt stats.json 损坏 / 缺失
+        Stats->>Repo: 触发从 JSONL 重建
+        Repo->>Repo: rebuildFromJsonl()
+        Repo-->>Stats: 写回 stats.json
+        Note right of Repo: RecoveryReport 记入日志，<br/>UI 顶部提示一次
+    end
+    Stats-->>Repo: StatsSnapshot
+    Repo-->>HC: snapshot
+
+    HC->>Mastery: masteryOf(each intervalId)
+    Note right of Mastery: mastery = 正确率 × 置信度衰减<br/>样本少 → 置信度低 → mastery 低
+    Mastery-->>HC: Map~IntervalId, double~
+    HC-->>UI: 弱项 chip（M-07 呼吸）+ 今日推荐卡
+
+    UI->>HC: startTodayRecommended()
+    HC->>Planner: plan(totalQuestions: 20, snapshot, config)
+
+    Planner->>Planner: 1) 按 mastery 分桶
+    Note right of Planner: weak    < 0.5<br/>medium  0.5–0.75<br/>strong  0.75–0.9<br/>mastered ≥ 0.9
+
+    Planner->>Planner: 2) 配额 = round(total × 权重)<br/>weak 50% / medium 25%<br/>strong 15% / mastered 10%
+    Planner->>Planner: 3) 空桶回填：<br/>某桶没音程 → 配额顺延给<br/>下一优先级非空桶
+    Planner->>Planner: 4) 余数修正：<br/>Σ配额 ≠ total 时<br/>差额补给 weak 桶
+    Planner-->>HC: List~BucketQuota~
+
+    loop 每个桶
+        HC->>Gen: sample(bucket.intervals, quota, Rand)
+        Note right of Gen: 桶内均匀抽样，<br/>同一音程可重复出现，<br/>但避免连续 3 题相同
+        Gen-->>HC: List~IntervalId~
+    end
+
+    HC->>Gen: shuffle(all, Rand)
+    Note right of Gen: 整体洗牌后再做<br/>「相邻不同音程」修正
+    Gen-->>HC: 最终 20 题音程序列
+
+    HC->>Gen: 逐题 pickRoot + buildOptions
+    Gen-->>HC: List~IntervalQuestion~
+    HC-->>UI: 导航到 TrainingPage（M-01）
+
+    Note over UI,Rand: Random 由外部注入（§2 可注入随机种子）：<br/>生产用 Random()，测试用 Random(42) → 组卷完全可复现
+
