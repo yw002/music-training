@@ -350,3 +350,35 @@ enum MasteryBucket {
         defaultValue,
       );
 }
+
+/// 主题模式偏好（领域层，不依赖 flutter 的 `ThemeMode`）。
+///
+/// 之所以不放 flutter 的 `ThemeMode`：领域层必须保持纯 Dart（§3.1 / 域纯度
+/// 验收），而 `ThemeMode` 来自 `package:flutter/material.dart`。表现层在用到时
+/// 再映射到 flutter `ThemeMode`（`system`→`ThemeMode.system` 等）。
+enum ThemePreference {
+  /// 跟随系统。
+  system('system'),
+
+  /// 浅色。
+  light('light'),
+
+  /// 深色。
+  dark('dark');
+
+  const ThemePreference(this.storageId);
+
+  /// 落盘用稳定字符串。
+  final String storageId;
+
+  /// 未知值降级目标。
+  static const ThemePreference defaultValue = ThemePreference.system;
+
+  /// 由 `storageId` 解码，未知值降级为 [defaultValue]。
+  static ThemePreference fromStorageId(Object? raw) => decodeEnumByStorageId(
+        ThemePreference.values,
+        (v) => v.storageId,
+        raw,
+        defaultValue,
+      );
+}
