@@ -38,6 +38,13 @@ abstract class TrainingRepository {
   /// 导出训练数据为单文件 JSON 字符串（可被导入还原）。
   Future<String> exportJson();
 
+  /// 从单文件 JSON 字符串导入并替换全部训练数据（含结构校验）。
+  ///
+  /// 会清空现有流水与统计，按流水分片规则重新写入导入的 attempts/sessions，
+  /// 并重建 stats 缓存，保证内存与 `stats.json` 一致。校验失败
+  /// （schema 不符 / JSON 损坏）抛 [FormatException]，调用方负责转换为用户提示文案。
+  Future<void> importJson(String json);
+
   /// 强制落盘内存统计。
   Future<void> flush();
 }

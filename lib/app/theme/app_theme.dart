@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:interval_ear/app/theme/color_schemes.dart';
+import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/app/theme/elevation_tokens.dart';
 import 'package:interval_ear/app/theme/gradient_tokens.dart';
 import 'package:interval_ear/app/theme/interval_palette.dart';
@@ -16,6 +17,14 @@ import 'package:interval_ear/core/motion/motion_tokens.dart';
 /// `AppSemanticColors / AppGradients / AppElevations / AppIntervalPalette /
 ///  AppTextExtras / AppMotionTokens`，统一经 `context.tokens` 访问。
 abstract final class AppTheme {
+  /// 把领域层 [ThemePreference] 映射为 flutter `ThemeMode`（表现层映射集中处，
+  /// 避免散落到各个页面；架构 §1.2 / §8.6）。
+  static ThemeMode themeModeFor(ThemePreference preference) => switch (preference) {
+        ThemePreference.system => ThemeMode.system,
+        ThemePreference.light => ThemeMode.light,
+        ThemePreference.dark => ThemeMode.dark,
+      };
+
   /// 浅色主题。
   static ThemeData get light => _build(Brightness.light);
 

@@ -190,6 +190,48 @@ class TrainingRepositoryImpl implements TrainingRepository {
   }
 
   @override
+  Future<void> importJson(String json) async {
+    final Map<String, dynamic> payload;
+    try {
+      payload = jsonDecode(json) as Map<String, dynamic>;
+    } on Object {
+      throw const FormatException('导出文件格式不正确');
+    }
+    if (payload['schema'] != 'interval_ear.export') {
+      throw const FormatException('导出文件格式不正确');
+    }
+    final List<dynamic> rawSessions = payload['sessions'] is List
+        ? payload['sessions'] as List<dynamic>
+        : <dynamic>[];
+    final List<dynamic> rawAttempts = payload['attempts'] is List
+        ? payload['attempts'] as List<dynamic>
+        : <dynamic>[];
+    final List<TrainingSession> sessions = rawSessions
+        .map((e) => SessionDto.fromJson(e as Map<String, dynamic>).session)
+        .toList();
+    final List<TrainingAttempt> attempts = rawAttempts
+        .map((e) => AttemptDto.fromJson(e as Map<String, dynamic>).attempt)
+        .toList();
+    // 原子替换：先清空流水与统计，再写入导入内容，最后重建统计并落盘。
+    await clearAll();
+    for (final TrainingSession session in sessions) {
+      await _sessions.append(
+        _sessionShard(session.startedAt),
+        SessionDto(session).toJson(),
+      );
+    }
+    for (final TrainingAttempt attempt in attempts) {
+      await _attempts.append(
+        _attemptShard(attempt.createdAt),
+        AttemptDto(attempt).toJson(),
+      );
+    }
+    await _stats.rebuildFromAttempts(attempts, sessions);
+    await _persistStats();
+    _notify();
+  }
+
+  @override
   Future<void> flush() async {
     await _persistStats();
   }

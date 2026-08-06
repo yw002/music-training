@@ -192,6 +192,19 @@ class CourseChapter extends Equatable {
   List<Object?> get props =>
       <Object?>[index, nameZh, IntervalCatalog.sorted(intervals)];
 
+  /// 以 [base] 为模板，生成该章的默认训练配置。
+  ///
+  /// 与 [CoursePreset.toConfig] 一致：仅替换音程集合与答题模式，保留用户
+  /// 当前的播放设置。零历史时首页「今日练习」退化调用本方法（架构 §4.3）。
+  TrainingConfig toConfig(TrainingConfig base) => base.copyWith(
+        enabledIntervals: Set<IntervalId>.unmodifiable(intervals),
+        answerMode: intervals.length == 2
+            ? AnswerMode.binary
+            : (base.answerMode == AnswerMode.binary
+                ? AnswerMode.enabledOnly
+                : base.answerMode),
+      );
+
   @override
   String toString() => 'CourseChapter($index, ${intervals.length} intervals)';
 }

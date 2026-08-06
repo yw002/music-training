@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'package:interval_ear/app/app.dart';
 import 'package:interval_ear/app/app_dependencies.dart';
+import 'package:interval_ear/app/router/app_pages.dart';
 import 'package:interval_ear/app/router/app_router.dart';
 import 'package:interval_ear/core/constants/app_config.dart';
 import 'package:interval_ear/core/constants/app_strings.dart';
@@ -28,7 +29,10 @@ abstract final class AppBootstrap {
     await configureDesktopWindow();
     final AppDependencies dependencies =
         await AppDependencies.bootstrap(pages: pages);
-    runApp(IntervalEarApp(dependencies: dependencies));
+    // 默认注入本批次已落地的功能页；测试仍可显式传入自定义 pages 覆盖。
+    final AppRoutePages effectivePages =
+        pages.builders.isEmpty ? buildFeaturePages(dependencies) : pages;
+    runApp(IntervalEarApp(dependencies: dependencies.withPages(effectivePages.builders)));
   }
 
   /// 安装全局错误兜底。

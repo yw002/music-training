@@ -639,6 +639,9 @@ final class SettingsStrings {
   /// 音频分区。
   String get audioSection => '音频';
 
+  /// 音频后端诊断项。
+  String get audioBackend => '音频后端';
+
   /// 音色。
   String get timbre => '音色';
 
@@ -656,6 +659,12 @@ final class SettingsStrings {
 
   /// 触觉反馈开关。
   String get hapticsEnabled => '触觉反馈';
+
+  /// 播放时朗读音程名。
+  String get announcePlayback => '播放时朗读音程名';
+
+  /// 自动进入下一题延迟。
+  String get autoNextDelay => '自动进入下一题延迟';
 
   /// 训练分区。
   String get trainingSection => '训练';
@@ -701,6 +710,9 @@ final class SettingsStrings {
 
   /// 关于分区。
   String get aboutSection => '关于';
+
+  /// 音频正常。
+  String get audioNormal => '音频正常';
 }
 
 /// 关于页。

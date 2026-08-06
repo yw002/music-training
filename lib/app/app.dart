@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:interval_ear/app/app_dependencies.dart';
 import 'package:interval_ear/app/router/route_names.dart';
 import 'package:interval_ear/app/theme/app_theme.dart';
@@ -7,6 +7,9 @@ import 'package:interval_ear/core/constants/app_config.dart';
 import 'package:interval_ear/core/constants/app_strings.dart';
 import 'package:interval_ear/core/motion/motion_level.dart';
 import 'package:interval_ear/core/motion/motion_scope.dart';
+import 'package:interval_ear/features/settings/presentation/settings_cubit.dart';
+import 'package:interval_ear/features/settings/presentation/settings_state.dart';
+import 'package:interval_ear/features/training/domain/models/app_settings.dart';
 
 /// 应用根 Widget。
 ///
@@ -14,48 +17,50 @@ import 'package:interval_ear/core/motion/motion_scope.dart';
 /// - 装配 `MaterialApp`（主题、路由、本地化）；
 /// - 在 `builder` 内挂 [MotionScopeHost]（需要 `MediaQuery`）与文字缩放钳制；
 /// - **不**做任何业务逻辑。
-class IntervalEarApp extends StatefulWidget {
+///
+/// 主题模式与动效强度由 [SettingsCubit]（应用级状态源）驱动：改设置即时生效，
+/// 无需重启（T17 验收）。
+class IntervalEarApp extends StatelessWidget {
   /// 创建应用根。
   const IntervalEarApp({
     required this.dependencies,
-    this.themeMode = ThemeMode.dark,
-    this.motionPreference = MotionPreference.system,
     super.key,
   });
 
   /// 应用级依赖。
   final AppDependencies dependencies;
 
-  /// 主题模式。PRD 把深色定为推荐默认体验。
-  final ThemeMode themeMode;
-
-  /// 用户动效偏好（设置页落地后由 SettingsBloc 驱动）。
-  final MotionPreference motionPreference;
-
   @override
-  State<IntervalEarApp> createState() => _IntervalEarAppState();
-}
-
-class _IntervalEarAppState extends State<IntervalEarApp> {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: AppStrings.common.appName,
-      debugShowCheckedModeBanner: false,
-      navigatorKey: widget.dependencies.navigatorKey,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: widget.themeMode,
-      initialRoute: RouteNames.home,
-      onGenerateRoute: widget.dependencies.router.onGenerateRoute,
-      onUnknownRoute: widget.dependencies.router.onUnknownRoute,
-      builder: (BuildContext context, Widget? child) => AppShell(
-        governorOwner: widget.dependencies,
-        motionPreference: widget.motionPreference,
-        child: child ?? const SizedBox.shrink(),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => dependencies.providers(
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          // 仅在「设置是否已加载」或「设置内容变化」时重建 MaterialApp，
+          // 避免因其他状态子类切换而反复重建整棵应用树。
+          buildWhen: (SettingsState previous, SettingsState next) =>
+              previous is! SettingsLoaded ||
+              next is! SettingsLoaded ||
+              previous.settings != next.settings,
+          builder: (BuildContext context, SettingsState state) {
+            final AppSettings settings =
+                state is SettingsLoaded ? state.settings : AppSettings.defaults;
+            return MaterialApp(
+              title: AppStrings.common.appName,
+              debugShowCheckedModeBanner: false,
+              navigatorKey: dependencies.navigatorKey,
+              theme: AppTheme.light,
+              darkTheme: AppTheme.dark,
+              themeMode: AppTheme.themeModeFor(settings.themeMode),
+              initialRoute: RouteNames.home,
+              onGenerateRoute: dependencies.router.onGenerateRoute,
+              onUnknownRoute: dependencies.router.onUnknownRoute,
+              builder: (BuildContext context, Widget? child) => AppShell(
+                governorOwner: dependencies,
+                motionPreference: settings.motionPreference,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
+        ),
+      );
 }
 
 /// `MaterialApp.builder` 里插入的公共外壳。
@@ -77,7 +82,7 @@ class AppShell extends StatelessWidget {
   /// 持有看门狗的依赖容器。
   final AppDependencies governorOwner;
 
-  /// 用户动效偏好。
+  /// 用户动效偏好（来自 [SettingsCubit]）。
   final MotionPreference motionPreference;
 
   @override
