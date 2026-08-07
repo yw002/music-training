@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:interval_ear/app/theme/tokens_context_ext.dart';
+import 'package:interval_ear/app/router/route_names.dart';
 import 'package:interval_ear/core/audio/audio_service.dart';
 import 'package:interval_ear/core/constants/app_strings.dart';
+import 'package:interval_ear/features/session_summary/presentation/session_summary_arguments.dart';
 import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/features/training/presentation/cubit/training_cubit.dart';
 import 'package:interval_ear/features/training/presentation/cubit/training_state.dart';
@@ -258,6 +260,17 @@ class _FinishedView extends StatelessWidget {
             SizedBox(
               height: tokens.space.minTouchTarget,
               child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pushNamed(
+                  RouteNames.sessionSummary,
+                  arguments: SessionSummaryArguments(session: state.session),
+                ),
+                child: Text(AppStrings.summary.viewSummary),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: tokens.space.minTouchTarget,
+              child: OutlinedButton(
                 onPressed: () => Navigator.of(context).maybePop(),
                 child: Text(AppStrings.common.back),
               ),

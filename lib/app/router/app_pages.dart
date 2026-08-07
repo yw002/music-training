@@ -4,6 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:interval_ear/app/app_dependencies.dart';
 import 'package:interval_ear/app/router/app_router.dart';
 import 'package:interval_ear/app/router/route_names.dart';
+import 'package:interval_ear/features/free_training/presentation/free_training_cubit.dart';
+import 'package:interval_ear/features/free_training/presentation/free_training_page.dart';
+import 'package:interval_ear/features/home/presentation/home_page.dart';
+import 'package:interval_ear/features/report/presentation/report_page.dart';
+import 'package:interval_ear/features/session_summary/presentation/session_summary_arguments.dart';
+import 'package:interval_ear/features/session_summary/presentation/session_summary_page.dart';
 import 'package:interval_ear/features/settings/presentation/about_page.dart';
 import 'package:interval_ear/features/settings/presentation/settings_page.dart';
 import 'package:interval_ear/features/training/domain/models/enums.dart';
@@ -15,26 +21,27 @@ import 'package:interval_ear/features/training/presentation/pages/training_page.
 
 /// 集中登记本批次已落地的功能路由（架构 §1.3）。
 ///
-/// 未在此登记的路由（`/home` `/summary` `/free` `/report`）走 `AppRouter` 的
-/// 「未登记路由回落占位页」机制，不崩溃，待后续批次（T18–T21）接入。
+/// `sessionSummary` 对应页面（T20 本组小结）与 `report` 对应页面（T21 报告与图表）
+/// 均已实现并接入；`weakPairs` 不登记，由占位页兜底（架构 §8.4）。
+/// [RouteNames.freeTraining] 由路由层用 `BlocProvider` 注入 [FreeTrainingCubit]，
+/// 与训练页的工厂闭包同源。
 AppRoutePages buildFeaturePages(AppDependencies deps) =>
     AppRoutePages.empty().withPages(<String, AppPageBuilder>{
-      // TODO Round2: 接 home（首页 T18）。
-      // RouteNames.home: (BuildContext context, Object? arguments) =>
-      //     const HomePage(),
+      RouteNames.home: (BuildContext context, Object? arguments) =>
+          const HomePage(),
       RouteNames.training: (BuildContext context, Object? arguments) =>
           _training(deps, arguments, binary: false),
       RouteNames.binaryTraining: (BuildContext context, Object? arguments) =>
           _training(deps, arguments, binary: true),
-      // TODO Round2: 接 sessionSummary（本组小结 T20）。
-      // RouteNames.sessionSummary: (BuildContext context, Object? arguments) =>
-      //     SessionSummaryPage(arguments: arguments as SessionSummaryArguments),
-      // TODO Round3: 接 freeTraining（自由训练 T19）。
-      // RouteNames.freeTraining: (BuildContext context, Object? arguments) =>
-      //     const FreeTrainingPage(),
-      // TODO Round3: 接 report（报告 T21）。
-      // RouteNames.report: (BuildContext context, Object? arguments) =>
-      //     const ReportPage(),
+      RouteNames.sessionSummary: (BuildContext context, Object? arguments) =>
+          SessionSummaryPage(arguments: arguments as SessionSummaryArguments),
+      RouteNames.freeTraining: (BuildContext context, Object? arguments) =>
+          BlocProvider<FreeTrainingCubit>(
+            create: (_) => FreeTrainingCubit(settingsRepo: deps.settingsRepo),
+            child: const FreeTrainingPage(),
+          ),
+      RouteNames.report: (BuildContext context, Object? arguments) =>
+          const ReportPage(),
       RouteNames.settings: (BuildContext context, Object? arguments) =>
           const SettingsPage(),
       RouteNames.about: (BuildContext context, Object? arguments) =>

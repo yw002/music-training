@@ -131,6 +131,9 @@ final class CommonStrings {
   /// 自定义。
   String get custom => '自定义';
 
+  /// 多条校验提示之间的分隔符。
+  String get issueSeparator => '；';
+
   /// 全选。
   String get selectAll => '全选';
 
@@ -396,6 +399,9 @@ final class SummaryStrings {
   /// 查看报告。
   String get viewReport => '查看报告';
 
+  /// 查看本组小结。
+  String get viewSummary => '查看小结';
+
   /// 回到首页。
   String get backHome => '回到首页';
 
@@ -473,6 +479,34 @@ final class FreeTrainingStrings {
   /// 至少选择两个音程的校验提示。
   String get needAtLeastTwoIntervals => '至少选择 2 个音程';
 
+  /// 答题模式：全部 13 音程。
+  String get answerModeAll => '全部音程';
+
+  /// 答题模式：仅所选音程。
+  String get answerModeEnabled => '仅所选音程';
+
+  /// 答题模式：二选一。
+  String get answerModeBinary => '二选一';
+
+  /// 二选一模式恰好需要 2 个音程的校验提示。
+  String get binaryNeedsExactlyTwo => '二选一模式需要恰好 2 个音程';
+
+  /// 题数越界的校验提示。
+  String get questionCountOutOfRange => '题目数量超出允许范围';
+
+  /// 单音时长越界的校验提示。
+  String get noteDurationOutOfRange => '单音时长超出允许范围';
+
+  /// 音符间隔越界的校验提示。
+  String get noteGapOutOfRange => '音符间隔超出允许范围';
+
+  /// 通用配置无效提示。
+  String get invalidConfig => '配置无效，请检查后重试';
+
+  /// 「全部 13 音程」与「今日推荐」的差异说明。
+  String get allVsTodayHint =>
+      '全部 13 音程：覆盖所有音程，适合系统巩固；今日推荐会根据你的掌握情况自适应挑选。';
+
   /// 恢复默认配置。
   String get resetToDefault => '恢复默认';
 }
@@ -508,6 +542,9 @@ final class ReportStrings {
   /// 练习天数。
   String get practiceDays => '练习天数';
 
+  /// 总体正确率。
+  String get overallAccuracy => '总体正确率';
+
   /// 时间范围：近 7 天。
   String get range7Days => '近 7 天';
 
@@ -535,6 +572,15 @@ final class ReportStrings {
 
   /// 掌握度分桶：样本不足。
   String get masteryUnknown => '样本不足';
+
+  /// 维度表现分区。
+  String get dimensionSection => '维度表现';
+
+  /// 每日练习热力分区。
+  String get heatmapSection => '每日练习';
+
+  /// 空数据态的引导提示。
+  String get emptyHint => '完成几组训练后，这里会展示你的进步曲线';
 
   /// 导出数据。
   String get exportData => '导出数据';

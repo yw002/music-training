@@ -3,6 +3,7 @@ import 'package:interval_ear/core/utils/math_utils.dart';
 import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/features/training/domain/models/interval_pair.dart';
 import 'package:interval_ear/features/training/domain/models/schema_version.dart';
+import 'package:interval_ear/features/training/domain/models/training_attempt.dart';
 import 'package:interval_ear/features/training/domain/models/training_config.dart';
 
 /// 一组训练的汇总记录（架构 §3.1）。
@@ -25,6 +26,7 @@ class TrainingSession extends Equatable {
     this.maxCombo = 0,
     this.focusPair,
     this.presetId,
+    this.mistakes = const <TrainingAttempt>[],
     this.schemaVersion = kDomainSchemaVersion,
   });
 
@@ -70,6 +72,13 @@ class TrainingSession extends Equatable {
   /// 这个字段，这里补上。
   final String? presetId;
 
+  /// 本组答错的作答（含「不确定」），供结算页错题清单回放对比。
+  ///
+  /// 与 `StatsSnapshot` 互为独立：这里是「这一组」的错题快照，便于结算页直接
+  /// 复用 [FeedbackController] 做对比播放，而不必再去流水里捞。向后兼容：旧
+  /// 落盘数据缺该字段时按空列表处理。
+  final List<TrainingAttempt> mistakes;
+
   /// 落盘 schema 版本。
   final int schemaVersion;
 
@@ -106,6 +115,7 @@ class TrainingSession extends Equatable {
     bool clearFocusPair = false,
     String? presetId,
     bool clearPresetId = false,
+    List<TrainingAttempt>? mistakes,
     int? schemaVersion,
   }) =>
       TrainingSession(
@@ -122,6 +132,7 @@ class TrainingSession extends Equatable {
         configSnapshot: configSnapshot ?? this.configSnapshot,
         focusPair: clearFocusPair ? null : (focusPair ?? this.focusPair),
         presetId: clearPresetId ? null : (presetId ?? this.presetId),
+        mistakes: mistakes ?? this.mistakes,
         schemaVersion: schemaVersion ?? this.schemaVersion,
       );
 
@@ -142,6 +153,7 @@ class TrainingSession extends Equatable {
         'configSnapshot': configSnapshot.toJson(),
         if (focusPair != null) 'focusPair': focusPair!.key(),
         if (presetId != null) 'presetId': presetId,
+        'mistakes': mistakes.map((a) => a.toJson()).toList(growable: false),
       };
 
   /// 反序列化。
@@ -163,6 +175,7 @@ class TrainingSession extends Equatable {
           : TrainingConfig.defaults,
       focusPair: IntervalPair.tryFromKey(json['focusPair'] as String? ?? ''),
       presetId: json['presetId'] as String?,
+      mistakes: _readMistakes(json['mistakes']),
       schemaVersion: readSchemaVersion(json),
     );
   }
@@ -188,6 +201,19 @@ class TrainingSession extends Equatable {
     return null;
   }
 
+  static List<TrainingAttempt> _readMistakes(Object? raw) {
+    if (raw is! List) {
+      return const <TrainingAttempt>[];
+    }
+    final result = <TrainingAttempt>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) {
+        result.add(TrainingAttempt.fromJson(item));
+      }
+    }
+    return List<TrainingAttempt>.unmodifiable(result);
+  }
+
   @override
   List<Object?> get props => <Object?>[
         sessionId,
@@ -203,6 +229,7 @@ class TrainingSession extends Equatable {
         configSnapshot,
         focusPair,
         presetId,
+        mistakes,
         schemaVersion,
       ];
 

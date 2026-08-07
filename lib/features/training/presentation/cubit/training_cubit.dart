@@ -347,7 +347,8 @@ class TrainingCubit extends Cubit<TrainingState> {
       return;
     }
     runner.finishNow(_clock());
-    final session = runner.session;
+    final mistakes = runner.attempts.where((a) => !a.isCorrect).toList();
+    final session = runner.session.copyWith(mistakes: mistakes);
     try {
       await _repository.finishSession(session);
     } on Object catch (e, st) {
