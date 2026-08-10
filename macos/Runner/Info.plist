@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- T24 §9.2.2：Dock / 访达 显示名。PRODUCT_NAME 保持 ASCII(interval_ear)
+	     以免可执行文件名与构建产物路径出现非 ASCII，展示名走本键。 -->
+	<key>CFBundleDisplayName</key>
+	<string>音程听辨</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
@@ -20,13 +24,25 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- T24 §9.2.2：取自 MACOSX_DEPLOYMENT_TARGET = 10.15
+	     （flutter_soloud 与 Flutter 3.44 的共同下限，见 Runner.xcodeproj）。 -->
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<!-- T24 §9.2.2：Retina 高分屏渲染。 -->
+	<key>NSHighResolutionCapable</key>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- T24 §9.2.2：双显卡机型自动切换核显，省电。 -->
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<!-- 安全审计（T24 验收 ①）：本 App 只用 flutter_soloud 本地合成播放，
+	     不录音、不联网。故**刻意不声明** NSMicrophoneUsageDescription /
+	     NSCameraUsageDescription / NSPhotoLibrary* 等任何隐私权限键。
+	     请勿因插件文档提示而添加，否则会触发上架审核质询与系统权限弹框。 -->
 </dict>
 </plist>

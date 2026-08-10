@@ -16,6 +16,7 @@ import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/features/training/domain/models/interval_catalog.dart';
 import 'package:interval_ear/features/training/domain/models/interval_id.dart';
 import 'package:interval_ear/features/training/domain/models/training_config.dart';
+import 'package:interval_ear/features/training/domain/models/training_session.dart';
 import 'package:interval_ear/features/training/presentation/cubit/training_cubit.dart';
 import 'package:interval_ear/features/training/presentation/pages/training_page.dart';
 
@@ -51,6 +52,10 @@ AppRoutePages buildFeaturePages(AppDependencies deps) =>
 /// 训练页工厂闭包：用 [BlocProvider] 包住 [TrainingCubit]，确保 `TrainingPage`
 /// 内 `context.read<TrainingCubit>()` / `context.read<AudioService>()` 不抛
 /// `ProviderNotFoundException`（架构 §1.1）。
+///
+/// T23：把 Cubit 的「进行中会话」广播接到应用级 `ActiveSessionRegistry`，
+/// 好让退到后台 / 关窗时能把没打完的一组标记为 `aborted` 落盘（验收 ⑥）。
+/// 用回调而非直接注入登记处，是为了不让 `features/` 反向依赖 `app/`。
 Widget _training(
   AppDependencies deps,
   Object? arguments, {
@@ -62,6 +67,13 @@ Widget _training(
         repository: deps.trainingRepo,
         audio: deps.audio,
         settings: deps.settingsCubit.current,
+        onActiveSessionChanged: (TrainingSession? session) {
+          if (session == null) {
+            deps.activeSessions.clear();
+          } else {
+            deps.activeSessions.update(session);
+          }
+        },
       ),
       child: const TrainingPage(),
     );

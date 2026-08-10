@@ -2,7 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- T24 §9.2.3 安全审计基线（Release 最严）：
+	     本 App 只做本地音频合成播放，不联网、不录音。以下四项
+	     **在 Release 中绝不允许出现**，是「不依赖网络」这条产品要求的技术兑现：
+	       com.apple.security.network.client
+	       com.apple.security.network.server
+	       com.apple.security.device.audio-input
+	       com.apple.security.device.camera
+	     （已核对：本文件历史上也未出现过这四项。） -->
 	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- T24 新增：T17 数据管理用 file_selector 做 JSON 导出/导入，
+	     沙盒下必须显式声明「用户选定文件读写」权限。仅限用户主动选中的文件。 -->
+	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 </dict>
 </plist>

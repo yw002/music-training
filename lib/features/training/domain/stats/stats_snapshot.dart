@@ -189,7 +189,9 @@ class StatsSnapshot extends Equatable {
 
   /// 用一次完成的会话增量更新（不可变返回新快照）。
   StatsSnapshot withSession(TrainingSession session) {
-    if (!session.isFinished()) {
+    // 中途退出（T23 验收 ⑥）与未结算的会话一律不进统计：既不加 totalSessions，
+    // 也不写 daily / lastTrainedAt，保证「打了一半就退出」不污染正确率与日历。
+    if (session.aborted || !session.isFinished()) {
       return this;
     }
     final nextDaily = Map<String, DailySummary>.of(daily);

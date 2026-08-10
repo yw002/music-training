@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:interval_ear/app/router/route_names.dart';
 import 'package:interval_ear/app/theme/tokens_context_ext.dart';
 import 'package:interval_ear/core/constants/app_strings.dart';
 import 'package:interval_ear/core/motion/curves.dart';
 import 'package:interval_ear/core/motion/motion_level.dart';
 import 'package:interval_ear/core/motion/motion_scope.dart';
 import 'package:interval_ear/core/motion/motion_tokens.dart';
+import 'package:interval_ear/core/platform/keyboard_shortcuts.dart';
+import 'package:interval_ear/core/widgets/responsive/breakpoint_scope.dart';
+import 'package:interval_ear/core/widgets/responsive/responsive_builder.dart';
 import 'package:interval_ear/features/report/presentation/report_cubit.dart';
 import 'package:interval_ear/features/report/presentation/report_state.dart';
 import 'package:interval_ear/features/report/presentation/widgets/confusion_matrix_view.dart';
@@ -63,26 +67,33 @@ class _ReportViewState extends State<_ReportView> {
         centerTitle: false,
         automaticallyImplyLeading: true,
       ),
-      body: BlocBuilder<ReportCubit, ReportState>(
-        builder: (BuildContext context, ReportState state) {
-          if (state is ReportLoading || state is ReportInitial) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state is ReportError) {
-            return Center(
-              child: Text(
-                state.message,
-                style: tokens.type.bodyMedium
-                    ?.copyWith(color: tokens.scheme.onSurfaceVariant),
-              ),
-            );
-          }
-          final StatsSnapshot snapshot = (state as ReportReady).snapshot;
-          if (snapshot.isEmpty) {
-            return const EmptyReportState();
-          }
-          return _ReportContent(snapshot: snapshot);
-        },
+      // T22：报告页也接入统一快捷键（Esc 返回、Ctrl/⌘+, 打开设置），
+      // 与点击返回箭头 / 设置入口走同一条导航路径。
+      body: AppShortcuts(
+        onDismiss: () => Navigator.of(context).maybePop(),
+        onOpenSettings: () =>
+            Navigator.of(context).pushNamed(RouteNames.settings),
+        child: BlocBuilder<ReportCubit, ReportState>(
+          builder: (BuildContext context, ReportState state) {
+            if (state is ReportLoading || state is ReportInitial) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state is ReportError) {
+              return Center(
+                child: Text(
+                  state.message,
+                  style: tokens.type.bodyMedium
+                      ?.copyWith(color: tokens.scheme.onSurfaceVariant),
+                ),
+              );
+            }
+            final StatsSnapshot snapshot = (state as ReportReady).snapshot;
+            if (snapshot.isEmpty) {
+              return const EmptyReportState();
+            }
+            return _ReportContent(snapshot: snapshot);
+          },
+        ),
       ),
     );
   }
@@ -94,7 +105,13 @@ class _ReportContent extends StatelessWidget {
   final StatsSnapshot snapshot;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ResponsiveBuilder(
+        builder: (BuildContext context, Breakpoint breakpoint) =>
+            _content(context, breakpoint),
+      );
+
+  /// 三档共用的分区列表；只有「单列 / 双列」这一处按断点分流（§8.3 最小变更）。
+  Widget _content(BuildContext context, Breakpoint breakpoint) {
     final AppTokens tokens = context.tokens;
     final DateTime now = context.read<ReportCubit>().now;
     final List<(String, Widget)> blocks = <(String, Widget)>[

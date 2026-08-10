@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:interval_ear/app/app_lifecycle_handler.dart';
 import 'package:interval_ear/app/router/app_router.dart';
 import 'package:interval_ear/core/audio/audio_service.dart';
 import 'package:interval_ear/core/audio/fake_audio_service.dart';
@@ -33,6 +34,7 @@ class AppDependencies {
     required this.trainingRepo,
     required this.settingsRepo,
     required this.settingsCubit,
+    required this.activeSessions,
   });
 
   /// 全局 Navigator key。`AppRouter` 借它在无 `BuildContext` 时读动效档位。
@@ -55,6 +57,12 @@ class AppDependencies {
 
   /// 应用级设置状态源（T17 新增，持有 [AppSettings]）。
   final SettingsCubit settingsCubit;
+
+  /// 进行中训练会话登记处（T23 新增）。
+  ///
+  /// 训练 Cubit 开局登记、结算清除；[AppLifecycleHandler] 在退到后台 / 关窗时
+  /// 读它，判断是否需要把没打完的一组标记为 `aborted` 落盘（验收 ⑥）。
+  final ActiveSessionRegistry activeSessions;
 
   /// 生产环境装配。
   ///
@@ -111,6 +119,7 @@ class AppDependencies {
       trainingRepo: trainingRepo,
       settingsRepo: settingsRepo,
       settingsCubit: settingsCubit,
+      activeSessions: ActiveSessionRegistry(),
     );
   }
 
@@ -127,6 +136,7 @@ class AppDependencies {
         trainingRepo: trainingRepo,
         settingsRepo: settingsRepo,
         settingsCubit: settingsCubit,
+        activeSessions: activeSessions,
       );
 
   /// 把进程级依赖注入组件树：三个仓储走 [RepositoryProvider]，设置 Cubit 走

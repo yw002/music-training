@@ -20,6 +20,16 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- T23 验收 ③：开启 edge-to-edge（内容延伸到状态栏 / 导航栏下方）。
+                 Flutter 侧另有 SystemChromeSetup.configure() 设置
+                 SystemUiMode.edgeToEdge + 透明系统栏；两者配合才能在
+                 Android 15 以下版本也拿到一致效果。
+                 注意：这里刻意不设置 android:statusBarColor —— 一旦指定，
+                 状态栏就不再透明，Flutter 侧的 transparent 会被覆盖。 -->
+            <meta-data
+              android:name="io.flutter.embedding.android.EdgeToEdge"
+              android:value="true"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

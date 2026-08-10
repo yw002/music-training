@@ -85,6 +85,20 @@ class TrainingRepositoryImpl implements TrainingRepository {
   }
 
   @override
+  Future<void> abortSession(TrainingSession session) async {
+    // 只追加流水，**不** applySession：aborted 会话不进统计（T23 验收 ⑥）。
+    // 仍然落一次 stats.json，保证退出前内存里的作答增量不丢。
+    final TrainingSession aborted =
+        session.aborted ? session : session.copyWith(aborted: true);
+    await _sessions.append(
+      _sessionShard(aborted.startedAt),
+      SessionDto(aborted).toJson(),
+    );
+    await _persistStats();
+    _notify();
+  }
+
+  @override
   Future<StatsSnapshot> loadStats() async {
     final statsFile =
         File('${_fileStore.dir.path}/${AppConfig.statsFileName}');
@@ -133,6 +147,10 @@ class TrainingRepositoryImpl implements TrainingRepository {
     final result = _sessions.readAll(prefix: _sessionsPrefix);
     final sessions = result.lines
         .map((m) => SessionDto.fromJson(m).session)
+        // T23：中途退出的记录只是排查用的面包屑，不是「一组训练」。
+        // 若把它算进最近 N 条，会挤掉真正已结算的会话，让章节推进判定
+        // （SessionRunner.shouldAdvanceChapter 取最近若干组）被无谓拖慢。
+        .where((s) => !s.aborted)
         .toList(growable: false);
     sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
     if (limit > 0 && sessions.length > limit) {

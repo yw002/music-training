@@ -180,6 +180,18 @@ abstract final class AppConfig {
   /// 桌面窗口默认高度。
   static const double desktopDefaultHeight = 800;
 
+  /// 恢复窗口几何时允许的单边最大值（逻辑像素）。
+  ///
+  /// 超过该值一律视为损坏记录并退回默认尺寸，避免把窗口撑到屏幕外后
+  /// 用户再也点不到标题栏。
+  static const double desktopMaxRestoreExtent = 20000;
+
+  /// macOS 红绿灯按钮占用的左侧宽度（逻辑像素）。
+  ///
+  /// 自绘顶栏（`WindowDragArea`）必须在左侧让出这段距离，否则内容会压在
+  /// 关闭/最小化/全屏三个按钮下面。
+  static const double macOSTrafficLightInset = 78;
+
   // ---------------------------------------------------------------------------
   // 无障碍
   // ---------------------------------------------------------------------------

@@ -17,6 +17,13 @@ abstract class TrainingRepository {
   /// 会话结算（追加 session + 落盘 stats.json）。
   Future<void> finishSession(TrainingSession session);
 
+  /// 中途退出：以 `aborted` 标记落盘一条会话记录（T23 验收 ⑥）。
+  ///
+  /// 与 [finishSession] 的区别：**只写流水、不进统计**。传入的会话会被强制
+  /// 打上 `aborted = true`，`StatsSnapshot.withSession` 对它直接跳过，
+  /// 因此无论增量累计还是从流水全量重建，正确率都不会被打了一半的组污染。
+  Future<void> abortSession(TrainingSession session);
+
   /// 加载最新统计快照（必要时从流水重建）。
   Future<StatsSnapshot> loadStats();
 

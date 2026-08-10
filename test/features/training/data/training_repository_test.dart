@@ -214,6 +214,76 @@ void main() {
       expect(snapshot.totalQuestions, 10000);
       expect(sw.elapsedMilliseconds, lessThan(2000));
     });
+
+    // ---- T23 验收 ⑥：中途退出落盘不污染统计 ----
+
+    test('abortSession 只写流水，不进统计（正确率与组数都不受影响）', () async {
+      final t = DateTime.utc(2026, 7, 1);
+      // 先正常打完一组：2 题全对。
+      await repo.recordAttempt(
+        _attempt('s1', IntervalId.minorSecond, IntervalId.minorSecond, t),
+      );
+      await repo.recordAttempt(
+        _attempt('s1', IntervalId.majorSeventh, IntervalId.majorSeventh, t),
+      );
+      await repo.finishSession(_session('s1', t));
+      final before = await repo.loadStats();
+
+      // 再中途退出一组（未结算）。
+      await repo.abortSession(
+        _session('s2', t.add(const Duration(hours: 1)), finished: false),
+      );
+      final after = await repo.loadStats();
+
+      expect(after.totalSessions, before.totalSessions);
+      expect(after.totalQuestions, before.totalQuestions);
+      // 日历（每日汇总）同样不该多出一组。
+      expect(after.daily.length, before.daily.length);
+    });
+
+    test('abortSession 强制打上 aborted 标记并落到会话流水', () async {
+      final t = DateTime.utc(2026, 7, 2);
+      // 传入未标记的会话，实现应强制标记。
+      await repo.abortSession(_session('s3', t, finished: false));
+
+      final file = File('${dir.path}/sessions_2026-07.jsonl');
+      expect(file.existsSync(), isTrue);
+      expect(file.readAsStringSync(), contains('"aborted":true'));
+    });
+
+    test('recentSessions 不返回 aborted 记录（不挤占章节推进窗口）', () async {
+      final t = DateTime.utc(2026, 7, 3);
+      await repo.finishSession(_session('done', t));
+      await repo.abortSession(
+        _session('quit', t.add(const Duration(hours: 2)), finished: false),
+      );
+
+      final recent = await repo.recentSessions(10);
+      expect(
+        recent.map((s) => s.sessionId).toList(),
+        <String>['done'],
+      );
+    });
+
+    test('从流水全量重建时同样跳过 aborted 会话', () {
+      // 直接打在纯函数上：无论增量累计还是全量重建，aborted 都不进统计，
+      // 两条路径的结果因此始终一致（T16 验收 2 的不变式在 T23 后仍成立）。
+      final t = DateTime.utc(2026, 7, 4);
+      final rebuilt = StatsRebuilder.rebuild(
+        <TrainingAttempt>[
+          _attempt('s1', IntervalId.minorSecond, IntervalId.minorSecond, t),
+        ],
+        <TrainingSession>[
+          _session('s1', t),
+          // 中途退出：既没有 finishedAt，也带 aborted 标记。
+          _session('s2', t.add(const Duration(hours: 1)), finished: false)
+              .copyWith(aborted: true),
+        ],
+      );
+
+      expect(rebuilt.totalSessions, 1);
+      expect(rebuilt.totalQuestions, 1);
+    });
   });
 
   group('SettingsRepository（T16 设置往返）', () {

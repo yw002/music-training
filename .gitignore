@@ -46,3 +46,7 @@ app.*.map.json
 
 
 .workbuddy/
+
+# 签名凭据（T24 / 架构 §9.5）：模板 tool/signing.env.example 入库，真实值不入库
+tool/signing.env
+tool/signing.env.ps1

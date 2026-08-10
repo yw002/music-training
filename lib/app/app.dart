@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:interval_ear/app/app_dependencies.dart';
+import 'package:interval_ear/app/app_lifecycle_handler.dart';
 import 'package:interval_ear/app/router/route_names.dart';
 import 'package:interval_ear/app/theme/app_theme.dart';
 import 'package:interval_ear/core/constants/app_config.dart';
@@ -16,22 +17,62 @@ import 'package:interval_ear/features/training/domain/models/app_settings.dart';
 /// 职责边界：
 /// - 装配 `MaterialApp`（主题、路由、本地化）；
 /// - 在 `builder` 内挂 [MotionScopeHost]（需要 `MediaQuery`）与文字缩放钳制；
+/// - 挂载**唯一**的进程级 [AppLifecycleHandler]（T23）；
 /// - **不**做任何业务逻辑。
 ///
 /// 主题模式与动效强度由 [SettingsCubit]（应用级状态源）驱动：改设置即时生效，
 /// 无需重启（T17 验收）。
-class IntervalEarApp extends StatelessWidget {
+///
+/// T23 说明：[lifecycleHandler] 在 [State.initState] 里 `attach()`、
+/// [State.dispose] 里 `detach()`。之所以放在 App 根而不是任何页面，是因为
+/// 它带有「停音频 + 落盘」的进程级副作用 —— 挂进页面 widget 会让页面级
+/// widget test 互相污染（架构 §2.8 硬约束）。参数可空，测试构造 App 根时
+/// 不传即完全无副作用。
+class IntervalEarApp extends StatefulWidget {
   /// 创建应用根。
   const IntervalEarApp({
     required this.dependencies,
+    this.lifecycleHandler,
     super.key,
   });
 
   /// 应用级依赖。
   final AppDependencies dependencies;
 
+  /// 进程级生命周期处理器（由 `AppBootstrap` 创建并传入）。
+  ///
+  /// 为 `null` 时不注册任何 [WidgetsBindingObserver]。
+  final AppLifecycleHandler? lifecycleHandler;
+
   @override
-  Widget build(BuildContext context) => dependencies.providers(
+  State<IntervalEarApp> createState() => _IntervalEarAppState();
+}
+
+class _IntervalEarAppState extends State<IntervalEarApp> {
+  @override
+  void initState() {
+    super.initState();
+    widget.lifecycleHandler?.attach();
+  }
+
+  @override
+  void didUpdateWidget(covariant IntervalEarApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(oldWidget.lifecycleHandler, widget.lifecycleHandler)) {
+      return;
+    }
+    oldWidget.lifecycleHandler?.detach();
+    widget.lifecycleHandler?.attach();
+  }
+
+  @override
+  void dispose() {
+    widget.lifecycleHandler?.detach();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.dependencies.providers(
         child: BlocBuilder<SettingsCubit, SettingsState>(
           // 仅在「设置是否已加载」或「设置内容变化」时重建 MaterialApp，
           // 避免因其他状态子类切换而反复重建整棵应用树。
@@ -45,15 +86,15 @@ class IntervalEarApp extends StatelessWidget {
             return MaterialApp(
               title: AppStrings.common.appName,
               debugShowCheckedModeBanner: false,
-              navigatorKey: dependencies.navigatorKey,
+              navigatorKey: widget.dependencies.navigatorKey,
               theme: AppTheme.light,
               darkTheme: AppTheme.dark,
               themeMode: AppTheme.themeModeFor(settings.themeMode),
               initialRoute: RouteNames.home,
-              onGenerateRoute: dependencies.router.onGenerateRoute,
-              onUnknownRoute: dependencies.router.onUnknownRoute,
+              onGenerateRoute: widget.dependencies.router.onGenerateRoute,
+              onUnknownRoute: widget.dependencies.router.onUnknownRoute,
               builder: (BuildContext context, Widget? child) => AppShell(
-                governorOwner: dependencies,
+                governorOwner: widget.dependencies,
                 motionPreference: settings.motionPreference,
                 child: child ?? const SizedBox.shrink(),
               ),

@@ -37,6 +37,11 @@ class TrainingCubit extends Cubit<TrainingState> {
   /// [config] 本组不可变配置；[repository] 落盘/读统计；[audio] 播放服务；
   /// [settings] 用户设置（反馈音、自动下一题、可视化/庆祝强度）；
   /// [random] 随机源（可注入 seed 做可复现测试）；[clock] 时钟（同样可注入）。
+  /// [onActiveSessionChanged] 是「进行中会话」的对外广播口（T23 验收 ⑥）：
+  /// 开局与每次作答后回调最新的 [TrainingSession]，结算 / 关闭时回调 `null`。
+  /// 应用根据此维护进程级登记处，在退到后台或关窗时把没打完的一组标记为
+  /// `aborted` 落盘。故意用回调而非直接依赖 `app/` 层对象，避免
+  /// `features → app` 的反向依赖；留空则完全无副作用（单测默认路径）。
   TrainingCubit({
     required TrainingConfig config,
     required TrainingRepository repository,
@@ -44,12 +49,14 @@ class TrainingCubit extends Cubit<TrainingState> {
     required AppSettings settings,
     math.Random? random,
     DateTime Function()? clock,
+    void Function(TrainingSession? session)? onActiveSessionChanged,
   })  : _config = config,
         _repository = repository,
         _audio = audio,
         _settings = settings,
         _random = random ?? math.Random(),
         _clock = clock ?? DateTime.now,
+        _onActiveSessionChanged = onActiveSessionChanged,
         super(const TrainingInitial());
 
   final TrainingConfig _config;
@@ -58,6 +65,7 @@ class TrainingCubit extends Cubit<TrainingState> {
   final AppSettings _settings;
   final math.Random _random;
   final DateTime Function() _clock;
+  final void Function(TrainingSession? session)? _onActiveSessionChanged;
 
   SessionRunner? _runner;
   int _playbackId = 0;
@@ -74,6 +82,8 @@ class TrainingCubit extends Cubit<TrainingState> {
     await _audioSub?.cancel();
     await _audio.stop();
     await _repository.flush();
+    // 页面销毁后这一组不再「进行中」：不清会导致后续退到后台时误判为中途退出。
+    _onActiveSessionChanged?.call(null);
     await super.close();
   }
 
@@ -94,6 +104,7 @@ class TrainingCubit extends Cubit<TrainingState> {
           : TrainingMode.daily,
     );
     await _repository.startSession(_runner!.session);
+    _onActiveSessionChanged?.call(_runner!.session);
     _audioSub ??= _audio.events.listen(_onAudioEvent);
     _loadQuestion(isFirst: true);
   }
@@ -275,6 +286,9 @@ class TrainingCubit extends Cubit<TrainingState> {
       now: _clock(),
     );
     await _safeRecord(attempt);
+    // T23 验收 ⑥：每答一题都刷新登记处，中途退出时落盘的是**当前进度**，
+    // 而不是开局那一份空快照。
+    _onActiveSessionChanged?.call(runner.session);
     if (_settings.feedbackSoundEnabled) {
       _audio.playSfx(attempt.isCorrect ? SfxId.correct : SfxId.wrong);
     }
@@ -354,6 +368,8 @@ class TrainingCubit extends Cubit<TrainingState> {
     } on Object catch (e, st) {
       AppLogger.warning('finishSession 失败', tag: 'TrainingCubit', error: e, stackTrace: st);
     }
+    // 正常结算完毕：撤销登记，之后再退到后台也不会被误判为「中途退出」。
+    _onActiveSessionChanged?.call(null);
     final chapterAdvanced = await _checkChapterAdvance();
     emit(
       TrainingFinished(

@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- T24 §9.3.1：允许 120Hz ProMotion 全速刷新（对应动效性能验收）。 -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- T24 §9.3.1：桌面图标名。 -->
 	<key>CFBundleDisplayName</key>
-	<string>Interval Ear</string>
+	<string>音程听辨</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,12 +49,18 @@
 			</array>
 		</dict>
 	</dict>
+	<!-- T24 §9.3.1：iPad 妙控键盘 / 触控板 / 外接键盘的间接输入事件，
+	     对应 T22「桌面快捷键全流程」在 iPad 上的等价能力。 -->
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<!-- T24 §9.3.1：状态栏样式先给默认值，运行时由 Dart 侧
+	     core/platform/system_chrome_setup.dart 通过 SystemChrome 统一覆盖。 -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -66,5 +74,18 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- T24 §9.3.1：交给 Dart 侧 SystemChrome 统一控制状态栏外观，
+	     避免每个 UIViewController 各自为政。 -->
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<!-- 安全审计（T24 验收 ①）：本 App 只用 flutter_soloud 本地合成播放。
+	     以下键**刻意不声明**，请勿添加：
+	       NSMicrophoneUsageDescription   —— 不录音
+	       NSCameraUsageDescription       —— 不用相机
+	       NSPhotoLibrary(Add)UsageDescription —— 导出走 share_plus，不写相册
+	       UIBackgroundModes: audio       —— 不需要后台播放，加了会被审核质询
+	     最低系统版本 MinimumOSVersion 不在此手写：由 Xcode 依据
+	     IPHONEOS_DEPLOYMENT_TARGET = 13.0（见 Runner.xcodeproj/project.pbxproj）
+	     在构建期自动注入，手写会造成两处真相不一致。 -->
 </dict>
 </plist>

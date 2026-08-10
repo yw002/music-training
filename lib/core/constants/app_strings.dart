@@ -325,6 +325,18 @@ final class TrainingStrings {
 
   /// 键盘快捷键提示。
   String get shortcutHint => '数字键选择答案，空格重播，回车下一题';
+
+  /// 桌面右侧栏快捷键面板标题（expanded 断点常驻展示）。
+  String get shortcutPanelTitle => '键盘快捷键';
+
+  /// 重播按钮桌面 tooltip（M-33，仅桌面显示）。
+  String get replayTooltip => '重播（空格）';
+
+  /// 「不确定」按钮桌面 tooltip。
+  String get uncertainTooltip => '不确定（U 键）';
+
+  /// 「下一题」按钮桌面 tooltip。
+  String get nextTooltip => '下一题（回车）';
 }
 
 /// 作答反馈与错题面板。

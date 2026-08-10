@@ -27,6 +27,7 @@ class TrainingSession extends Equatable {
     this.focusPair,
     this.presetId,
     this.mistakes = const <TrainingAttempt>[],
+    this.aborted = false,
     this.schemaVersion = kDomainSchemaVersion,
   });
 
@@ -79,6 +80,14 @@ class TrainingSession extends Equatable {
   /// 落盘数据缺该字段时按空列表处理。
   final List<TrainingAttempt> mistakes;
 
+  /// 是否为「中途退出」的会话（T23 验收 ⑥）。
+  ///
+  /// 退到后台 / 关窗时若本组还没打完，会以 `aborted = true` 落盘一条会话记录，
+  /// 便于事后排查「用户中断了多少组」。这类记录**不计入统计**：
+  /// `StatsSnapshot.withSession` 会直接跳过（同时它也没有 [finishedAt]），
+  /// 所以无论是增量累计还是从流水全量重建，正确率都不会被污染。
+  final bool aborted;
+
   /// 落盘 schema 版本。
   final int schemaVersion;
 
@@ -116,6 +125,7 @@ class TrainingSession extends Equatable {
     String? presetId,
     bool clearPresetId = false,
     List<TrainingAttempt>? mistakes,
+    bool? aborted,
     int? schemaVersion,
   }) =>
       TrainingSession(
@@ -133,6 +143,7 @@ class TrainingSession extends Equatable {
         focusPair: clearFocusPair ? null : (focusPair ?? this.focusPair),
         presetId: clearPresetId ? null : (presetId ?? this.presetId),
         mistakes: mistakes ?? this.mistakes,
+        aborted: aborted ?? this.aborted,
         schemaVersion: schemaVersion ?? this.schemaVersion,
       );
 
@@ -153,6 +164,9 @@ class TrainingSession extends Equatable {
         'configSnapshot': configSnapshot.toJson(),
         if (focusPair != null) 'focusPair': focusPair!.key(),
         if (presetId != null) 'presetId': presetId,
+        // 仅在真的中途退出时写入该键：旧记录与正常结算记录的 JSON 保持原样，
+        // 向后 / 向前兼容都不受影响。
+        if (aborted) 'aborted': true,
         'mistakes': mistakes.map((a) => a.toJson()).toList(growable: false),
       };
 
@@ -176,6 +190,7 @@ class TrainingSession extends Equatable {
       focusPair: IntervalPair.tryFromKey(json['focusPair'] as String? ?? ''),
       presetId: json['presetId'] as String?,
       mistakes: _readMistakes(json['mistakes']),
+      aborted: json['aborted'] as bool? ?? false,
       schemaVersion: readSchemaVersion(json),
     );
   }
@@ -230,6 +245,7 @@ class TrainingSession extends Equatable {
         focusPair,
         presetId,
         mistakes,
+        aborted,
         schemaVersion,
       ];
 
