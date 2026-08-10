@@ -6,6 +6,7 @@ import 'package:interval_ear/app/router/app_router.dart';
 import 'package:interval_ear/app/router/route_names.dart';
 import 'package:interval_ear/features/free_training/presentation/free_training_cubit.dart';
 import 'package:interval_ear/features/free_training/presentation/free_training_page.dart';
+import 'package:interval_ear/features/home/presentation/home_cubit.dart';
 import 'package:interval_ear/features/home/presentation/home_page.dart';
 import 'package:interval_ear/features/report/presentation/report_page.dart';
 import 'package:interval_ear/features/session_summary/presentation/session_summary_arguments.dart';
@@ -29,7 +30,10 @@ import 'package:interval_ear/features/training/presentation/pages/training_page.
 AppRoutePages buildFeaturePages(AppDependencies deps) =>
     AppRoutePages.empty().withPages(<String, AppPageBuilder>{
       RouteNames.home: (BuildContext context, Object? arguments) =>
-          const HomePage(),
+          BlocProvider<HomeCubit>(
+            create: (_) => HomeCubit(trainingRepo: deps.trainingRepo),
+            child: const HomePage(),
+          ),
       RouteNames.training: (BuildContext context, Object? arguments) =>
           _training(deps, arguments, binary: false),
       RouteNames.binaryTraining: (BuildContext context, Object? arguments) =>
