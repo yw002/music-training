@@ -44,12 +44,15 @@ class _FakeBackend implements AudioPlayerBackend {
   Duration _length = Duration.zero;
   int _srcCounter = 0;
   int _handleCounter = 0;
+  final List<String> loadedKeys = <String>[];
+  final List<Object> unloadedTokens = <Object>[];
 
   @override
   Future<void> init(int sampleRate, int bufferSize) async {}
 
   @override
   Future<LoadedAudio> load(String key, Uint8List wav) async {
+    loadedKeys.add(key);
     final int dataSize = wav.length > 44 ? wav.length - 44 : 0;
     final int samples = dataSize ~/ 2;
     _length = Duration(microseconds: (samples * 1000000) ~/ 44100);
@@ -57,7 +60,9 @@ class _FakeBackend implements AudioPlayerBackend {
   }
 
   @override
-  Future<void> unload(LoadedAudio audio) async {}
+  Future<void> unload(LoadedAudio audio) async {
+    unloadedTokens.add(audio.token);
+  }
 
   @override
   PlayingVoice playSource(LoadedAudio audio, double volume) {
@@ -252,8 +257,7 @@ void main() {
       expect(await run(), await run());
     });
 
-    test('不可用（available=false）时 playSequence 优雅降级为 error 事件',
-        () async {
+    test('不可用（available=false）时 playSequence 优雅降级为 error 事件', () async {
       final FakeAudioService s = FakeAudioService(available: false)
         ..initialize();
       expect(s.isAvailable, isFalse); // T09 验收 4：降级不崩。
@@ -298,6 +302,38 @@ void main() {
   });
 
   group('SoLoudAudioService 防重叠与 Ticker 停止（T09 验收 2/3）', () {
+    test('不同序列使用不同 L3 键，不会串用第一道题音频', () async {
+      final _FakeBackend backend = _FakeBackend();
+      final SoLoudAudioService service = SoLoudAudioService(backend: backend);
+      await service.initialize();
+      await service.playSequence(_spec(root: 60, target: 64));
+      await service.playSequence(_spec(root: 62, target: 67));
+
+      expect(backend.loadedKeys, hasLength(2));
+      expect(backend.loadedKeys[0], isNot(backend.loadedKeys[1]));
+      await service.dispose();
+    });
+
+    test('L3 淘汰与 dispose 都会卸载原生音源', () async {
+      final _FakeBackend backend = _FakeBackend();
+      final AudioBufferCache cache = AudioBufferCache(
+        backend: backend,
+        loadedCapacity: 1,
+      );
+      final SoLoudAudioService service = SoLoudAudioService(
+        backend: backend,
+        cache: cache,
+      );
+      await service.initialize();
+      await service.playSequence(_spec(root: 60, target: 64));
+      await service.playSequence(_spec(root: 62, target: 67));
+      await pumpEventQueue();
+      expect(backend.unloadedTokens, hasLength(1));
+
+      await service.dispose();
+      expect(backend.unloadedTokens, hasLength(2));
+    });
+
     test('防重叠：新 playSequence 停旧并丢弃旧 id 事件', () async {
       // 用普通 test（非 testWidgets）：本测试只验证服务层「新播放取消旧播放、旧 id
       // 事件被丢弃」的逻辑，不需要 WidgetTester，也不应驱动 Ticker。若用 testWidgets，

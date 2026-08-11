@@ -56,7 +56,8 @@ abstract final class SequenceBuilder {
       ),
     ];
     final Uint8List wav = WavEncoder.encodeMono16(composed.pcm, sr);
-    final Duration total = _atForSample(composed.pcm.length + _tailSamples(sr), sr);
+    final Duration total =
+        _atForSample(composed.pcm.length + _tailSamples(sr), sr);
     return SequenceRender(
       wav: wav,
       timeline: AudioTimeline(total: total, marks: marks),
@@ -167,7 +168,7 @@ abstract final class SequenceBuilder {
               noteIndex: -1,
               segmentIndex: 0,
               noteDuration: spec.noteDuration,
-                          ),
+            ),
             _mark(
               AudioEventType.noteEnd,
               noteSamples,
@@ -175,30 +176,16 @@ abstract final class SequenceBuilder {
               noteIndex: -1,
               segmentIndex: 0,
               noteDuration: spec.noteDuration,
-                          ),
+            ),
           ],
         );
       case PlaybackDirection.ascending:
         final _MelodyRender r = _concatMelody(root, target, gapMs, sr, spec);
         return _SpecRender(pcm: r.pcm, marks: r.marks);
       case PlaybackDirection.descending:
-        // 下行：高音（目标）先响 → target 作为第一个音传入。
-        final _MelodyRender r = _concatMelody(target, root, gapMs, sr, spec);
-        // 交换 noteIndex：段内第一音（target）记 1，第二音（root）记 0。
-        final List<AudioTimelineMark> swapped = r.marks
-            .map(
-              (AudioTimelineMark m) => AudioTimelineMark(
-                at: m.at,
-                type: m.type,
-                noteIndex: m.noteIndex == 0
-                    ? 1
-                    : (m.noteIndex == 1 ? 0 : -1),
-                segmentIndex: 0,
-                noteDuration: m.noteDuration,
-              ),
-            )
-            .toList();
-        return _SpecRender(pcm: r.pcm, marks: swapped);
+        // 下行题的 root 是高音、target 是低音，仍按 root → target 播放。
+        final _MelodyRender r = _concatMelody(root, target, gapMs, sr, spec);
+        return _SpecRender(pcm: r.pcm, marks: r.marks);
     }
   }
 
@@ -212,8 +199,7 @@ abstract final class SequenceBuilder {
   ) {
     final int noteSamples = first.length;
     final int gapSamples = (gapMs * sr / 1000).round();
-    final Float32List pcm =
-        Float32List(noteSamples + gapSamples + noteSamples);
+    final Float32List pcm = Float32List(noteSamples + gapSamples + noteSamples);
     pcm.setRange(0, noteSamples, first);
     // 间隔部分保持默认 0（静音）。
     pcm.setRange(
@@ -229,7 +215,7 @@ abstract final class SequenceBuilder {
         noteIndex: 0,
         segmentIndex: 0,
         noteDuration: spec.noteDuration,
-              ),
+      ),
       _mark(
         AudioEventType.noteEnd,
         noteSamples,
@@ -237,7 +223,7 @@ abstract final class SequenceBuilder {
         noteIndex: 0,
         segmentIndex: 0,
         noteDuration: spec.noteDuration,
-              ),
+      ),
       _mark(
         AudioEventType.noteStart,
         noteSamples + gapSamples,
@@ -245,7 +231,7 @@ abstract final class SequenceBuilder {
         noteIndex: 1,
         segmentIndex: 0,
         noteDuration: spec.noteDuration,
-              ),
+      ),
       _mark(
         AudioEventType.noteEnd,
         noteSamples + gapSamples + noteSamples,
@@ -253,7 +239,7 @@ abstract final class SequenceBuilder {
         noteIndex: 1,
         segmentIndex: 0,
         noteDuration: spec.noteDuration,
-              ),
+      ),
     ];
     return _MelodyRender(pcm: pcm, marks: marks);
   }
@@ -281,8 +267,7 @@ abstract final class SequenceBuilder {
       (at.inMicroseconds * sr / 1000000).round();
 
   /// 尾部 padding 的样本数。
-  static int _tailSamples(int sr) =>
-      (kTailPaddingMs * sr / 1000).round();
+  static int _tailSamples(int sr) => (kTailPaddingMs * sr / 1000).round();
 
   /// 全零 PCM（间隔 / 段间静音）。
   static Float32List _zeros(int n) => Float32List(n);

@@ -516,8 +516,7 @@ final class FreeTrainingStrings {
   String get invalidConfig => '配置无效，请检查后重试';
 
   /// 「全部 13 音程」与「今日推荐」的差异说明。
-  String get allVsTodayHint =>
-      '全部 13 音程：覆盖所有音程，适合系统巩固；今日推荐会根据你的掌握情况自适应挑选。';
+  String get allVsTodayHint => '全部 13 音程：覆盖所有音程，适合系统巩固；今日推荐会根据你的掌握情况自适应挑选。';
 
   /// 恢复默认配置。
   String get resetToDefault => '恢复默认';
@@ -719,7 +718,7 @@ final class SettingsStrings {
   String get hapticsEnabled => '触觉反馈';
 
   /// 播放时朗读音程名。
-  String get announcePlayback => '播放时朗读音程名';
+  String get announcePlayback => '答题后朗读结果';
 
   /// 自动进入下一题延迟。
   String get autoNextDelay => '自动进入下一题延迟';

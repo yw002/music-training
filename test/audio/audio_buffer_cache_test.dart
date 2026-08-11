@@ -5,10 +5,12 @@ import 'package:interval_ear/core/audio/audio_sequence.dart';
 import 'package:interval_ear/core/audio/cache/audio_buffer_cache.dart';
 import 'package:interval_ear/core/constants/app_config.dart';
 import 'package:interval_ear/features/training/domain/models/enums.dart';
+import 'package:interval_ear/features/training/domain/models/interval_id.dart';
 
 /// T08 验收 4/5 + 任务清单：三级缓存 LRU 淘汰、命中率、key 唯一性、
 /// 缓存键不含题目 ID、容量上限取自 app_config。
-AudioSequenceSpec _spec(int root, int target, Timbre timbre) => AudioSequenceSpec(
+AudioSequenceSpec _spec(int root, int target, Timbre timbre) =>
+    AudioSequenceSpec(
       rootMidiNote: root,
       targetMidiNote: target,
       direction: PlaybackDirection.ascending,
@@ -135,6 +137,17 @@ void main() {
       final AudioSequenceSpec b =
           a.copyWith(direction: PlaybackDirection.ascending);
       expect(a.cacheKey(), b.cacheKey());
+    });
+
+    test('withInterval 在下行模式生成低于根音的目标音', () {
+      const spec = AudioSequenceSpec(
+        rootMidiNote: 72,
+        targetMidiNote: 71,
+        direction: PlaybackDirection.descending,
+        timbre: Timbre.keyboard,
+      );
+      final changed = spec.withInterval(IntervalId.perfectFifth);
+      expect(changed.targetMidiNote, 65);
     });
   });
 }

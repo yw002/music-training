@@ -56,13 +56,16 @@ void _stubRepo(MockTrainingRepository repo) {
   when(() => repo.startSession(any())).thenAnswer((_) async {});
   when(() => repo.recordAttempt(any())).thenAnswer((_) async {});
   when(() => repo.finishSession(any())).thenAnswer((_) async {});
-  when(() => repo.recentSessions(any())).thenAnswer((_) async => <TrainingSession>[]);
+  when(() => repo.recentSessions(any()))
+      .thenAnswer((_) async => <TrainingSession>[]);
   when(() => repo.flush()).thenAnswer((_) async {});
-  when(() => repo.statsChanges).thenAnswer((_) => const Stream<StatsSnapshot>.empty());
+  when(() => repo.statsChanges)
+      .thenAnswer((_) => const Stream<StatsSnapshot>.empty());
 }
 
 /// 驱动到 awaitingAnswer：start → 推进虚拟时钟触发 sequenceEnd → awaiting。
-Future<void> _driveToAwaiting(TrainingCubit cubit, FakeAudioService audio) async {
+Future<void> _driveToAwaiting(
+    TrainingCubit cubit, FakeAudioService audio) async {
   await cubit.start();
   audio.advance(const Duration(seconds: 3));
   await pumpEventQueue();
@@ -110,7 +113,8 @@ void main() {
       await audio.dispose();
     });
 
-    test('完整流程：loading→ready→playing→awaiting→answered→next…→finished', () async {
+    test('完整流程：loading→ready→playing→awaiting→answered→next…→finished',
+        () async {
       final cubit = _build(repo, audio);
       final states = <TrainingState>[];
       final sub = cubit.stream.listen(states.add);
@@ -148,8 +152,7 @@ void main() {
     test('submitUncertain：标记为不确定，combo 不变', () async {
       final cubit = _build(repo, audio);
       await _driveToAwaiting(cubit, audio);
-      final comboBefore =
-          (cubit.state as TrainingAwaitingAnswer).combo;
+      final comboBefore = (cubit.state as TrainingAwaitingAnswer).combo;
       await cubit.submitUncertain();
       final answered = cubit.state as TrainingAnswered;
       expect(answered.isUncertain, isTrue);
@@ -161,8 +164,7 @@ void main() {
     test('replay 仅 awaiting 且可重播时生效（replayCount+1，重新播放）', () async {
       final cubit = _build(repo, audio);
       await _driveToAwaiting(cubit, audio);
-      final before =
-          (cubit.state as TrainingAwaitingAnswer).replayCount;
+      final before = (cubit.state as TrainingAwaitingAnswer).replayCount;
       cubit.replay();
       // replay 触发重播：等 playSequence 的 .then 把 _playbackId 置新，再推进虚拟时钟
       // 发 sequenceEnd，状态机才会以新的 replayCount 重新进入 awaiting。
@@ -220,7 +222,8 @@ void main() {
       await cubit.close();
     });
 
-    test('未 start（无 runner）时 submitAnswer/replay/next/abort 均为安全 no-op', () async {
+    test('未 start（无 runner）时 submitAnswer/replay/next/abort 均为安全 no-op',
+        () async {
       final cubit = _build(repo, audio);
       expect(cubit.state, isA<TrainingInitial>());
 
@@ -257,6 +260,37 @@ void main() {
       expect(finished.snapshot, isA<StatsSnapshot>());
       expect(finished.snapshot.isEmpty, isFalse);
       expect(finished.snapshot.totalQuestions, 5);
+      await cubit.close();
+    });
+
+    test('音频后端不可用时不会卡在 playing', () async {
+      final unavailable = FakeAudioService(available: false)..initialize();
+      final cubit = _build(repo, unavailable);
+
+      await cubit.start();
+      await pumpEventQueue();
+
+      expect(cubit.state, isA<TrainingAwaitingAnswer>());
+      await cubit.close();
+      await unavailable.dispose();
+    });
+
+    test('快速双击答案只记录一次、只前进一题', () async {
+      final Completer<void> writeGate = Completer<void>();
+      when(() => repo.recordAttempt(any())).thenAnswer((_) => writeGate.future);
+      final cubit = _build(repo, audio);
+      await _driveToAwaiting(cubit, audio);
+      final awaiting = cubit.state as TrainingAwaitingAnswer;
+
+      final first = cubit.submitAnswer(awaiting.question.correctInterval);
+      final second = cubit.submitAnswer(awaiting.question.correctInterval);
+      await second;
+      verify(() => repo.recordAttempt(any())).called(1);
+
+      writeGate.complete();
+      await first;
+      final answered = cubit.state as TrainingAnswered;
+      expect(answered.session.completedQuestions, 1);
       await cubit.close();
     });
   });

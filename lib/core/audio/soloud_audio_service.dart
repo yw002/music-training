@@ -28,9 +28,18 @@ import 'package:interval_ear/features/training/domain/models/enums.dart';
 ///    绝不抛异常（T09 验收 4）。真正的「换 Fake」由 AppBootstrap 完成，本类只保证不崩。
 class SoLoudAudioService implements AudioService {
   /// 构造。[backend]/[cache] 可注入以便测试。
-  SoLoudAudioService({AudioPlayerBackend? backend, AudioBufferCache? cache})
-      : _backend = backend ?? SoLoudBackend(),
-        _cache = cache ?? AudioBufferCache(backend: backend ?? SoLoudBackend());
+  factory SoLoudAudioService({
+    AudioPlayerBackend? backend,
+    AudioBufferCache? cache,
+  }) {
+    final AudioPlayerBackend resolvedBackend = backend ?? SoLoudBackend();
+    return SoLoudAudioService._(
+      resolvedBackend,
+      cache ?? AudioBufferCache(backend: resolvedBackend),
+    );
+  }
+
+  SoLoudAudioService._(this._backend, this._cache);
 
   final AudioPlayerBackend _backend;
   final AudioBufferCache _cache;
@@ -101,7 +110,7 @@ class SoLoudAudioService implements AudioService {
       _emit(AudioPlaybackEvent.error(id, 'synth failed: $e'));
       return id;
     }
-    await _playRender(render, id, spec.timbre, spec.gain);
+    await _playRender(render, id, spec.timbre, spec.gain, spec.cacheKey());
     return id;
   }
 
@@ -125,8 +134,11 @@ class SoLoudAudioService implements AudioService {
       return id;
     }
     // 对比播放用第一个 spec 的音色作占位（事件里的 timbre 仅用于可视化风格）。
-    final Timbre timbre = specs.isNotEmpty ? specs.first.timbre : Timbre.keyboard;
-    await _playRender(render, id, timbre, 1.0);
+    final Timbre timbre =
+        specs.isNotEmpty ? specs.first.timbre : Timbre.keyboard;
+    final String cacheKey = 'comparison-${gapBetween.inMicroseconds}-'
+        '${specs.map((AudioSequenceSpec spec) => spec.cacheKey()).join('|')}';
+    await _playRender(render, id, timbre, 1.0, cacheKey);
     return id;
   }
 
@@ -136,12 +148,13 @@ class SoLoudAudioService implements AudioService {
     int id,
     Timbre timbre,
     double gain,
+    String cacheKey,
   ) async {
     _timbre = timbre;
     LoadedAudio loaded;
     try {
       loaded = await _cache.getLoaded(
-        _cacheKeyFor(render),
+        cacheKey,
         render.wav,
       );
     } catch (e) {
@@ -162,10 +175,6 @@ class SoLoudAudioService implements AudioService {
     }
     _startTicker();
   }
-
-  /// 缓存键：用 WAV 长度 + 首字节指纹，避免与序列缓存键耦合（L3 独立）。
-  String _cacheKeyFor(SequenceRender render) =>
-      'seq-wav-${render.wav.length}-${render.wav[44]}';
 
   @override
   Future<void> playSfx(SfxId id) async {
@@ -226,11 +235,11 @@ class SoLoudAudioService implements AudioService {
       await _controller.close();
     }
     try {
+      await _cache.dispose();
       await _backend.shutdown();
     } catch (_) {
       // 忽略。
     }
-    _cache.clear();
   }
 
   // ---------------------------------------------------------------------------

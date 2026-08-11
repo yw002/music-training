@@ -58,8 +58,8 @@ class TrainingRepositoryImpl implements TrainingRepository {
 
   @override
   Future<void> startSession(TrainingSession session) async {
-    await _sessions.append(_sessionShard(session.startedAt),
-        SessionDto(session).toJson());
+    await _sessions.append(
+        _sessionShard(session.startedAt), SessionDto(session).toJson());
   }
 
   @override
@@ -100,8 +100,8 @@ class TrainingRepositoryImpl implements TrainingRepository {
 
   @override
   Future<StatsSnapshot> loadStats() async {
-    final statsFile =
-        File('${_fileStore.dir.path}/${AppConfig.statsFileName}');
+    final statsFile = File('${_fileStore.dir.path}/${AppConfig.statsFileName}');
+    final bool statsExists = await statsFile.exists();
     final bool statsCorrupt = await _isStatsCorrupt(statsFile);
     if (statsCorrupt) {
       await _fileStore.backupCorrupt(AppConfig.statsFileName);
@@ -112,14 +112,23 @@ class TrainingRepositoryImpl implements TrainingRepository {
     final attemptResult = _attempts.readAll(prefix: _attemptsPrefix);
     final sessionResult = _sessions.readAll(prefix: _sessionsPrefix);
 
-    if (statsCorrupt || attemptResult.hasCorruption) {
-      // 从流水重建 stats.json（T16 验收 1 / 2）。
-      final attempts = attemptResult.lines
-          .map((m) => AttemptDto.fromJson(m).attempt)
-          .toList(growable: false);
-      final sessions = sessionResult.lines
-          .map((m) => SessionDto.fromJson(m).session)
-          .toList(growable: false);
+    final attempts = attemptResult.lines
+        .map((m) => AttemptDto.fromJson(m).attempt)
+        .toList(growable: false);
+    final sessions = sessionResult.lines
+        .map((m) => SessionDto.fromJson(m).session)
+        .toList(growable: false);
+    final rebuilt = StatsSnapshot.rebuildFromAttempts(attempts, sessions);
+    final bool cacheStale = rebuilt != _stats.snapshot;
+    final bool journalHasData = attempts.isNotEmpty || sessions.isNotEmpty;
+    final bool needsRebuild = statsCorrupt ||
+        attemptResult.hasCorruption ||
+        sessionResult.hasCorruption ||
+        cacheStale ||
+        (!statsExists && journalHasData);
+
+    if (needsRebuild) {
+      // JSONL 是唯一真相源；即使 stats.json 能解析，落后流水也必须重建。
       await _stats.rebuildFromAttempts(attempts, sessions);
       await _persistStats();
       _pendingRecovery = RecoveryReport(
@@ -128,6 +137,7 @@ class TrainingRepositoryImpl implements TrainingRepository {
         recoveredAttempts: attempts.length,
         corruptFiles: <String>[
           ...attemptResult.corruptFiles,
+          ...sessionResult.corruptFiles,
           if (statsCorrupt) statsFile.path,
         ],
       );
@@ -145,12 +155,21 @@ class TrainingRepositoryImpl implements TrainingRepository {
   @override
   Future<List<TrainingSession>> recentSessions(int limit) async {
     final result = _sessions.readAll(prefix: _sessionsPrefix);
-    final sessions = result.lines
-        .map((m) => SessionDto.fromJson(m).session)
+    final latestById = <String, TrainingSession>{};
+    for (final line in result.lines) {
+      final session = SessionDto.fromJson(line).session;
+      final previous = latestById[session.sessionId];
+      if (previous == null ||
+          (session.finishedAt ?? session.startedAt)
+              .isAfter(previous.finishedAt ?? previous.startedAt)) {
+        latestById[session.sessionId] = session;
+      }
+    }
+    final sessions = latestById.values
         // T23：中途退出的记录只是排查用的面包屑，不是「一组训练」。
         // 若把它算进最近 N 条，会挤掉真正已结算的会话，让章节推进判定
         // （SessionRunner.shouldAdvanceChapter 取最近若干组）被无谓拖慢。
-        .where((s) => !s.aborted)
+        .where((s) => !s.aborted && s.isFinished())
         .toList(growable: false);
     sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
     if (limit > 0 && sessions.length > limit) {
@@ -215,39 +234,126 @@ class TrainingRepositoryImpl implements TrainingRepository {
     } on Object {
       throw const FormatException('导出文件格式不正确');
     }
-    if (payload['schema'] != 'interval_ear.export') {
+    if (payload['schema'] != 'interval_ear.export' ||
+        payload['schemaVersion'] != 1 ||
+        payload['sessions'] is! List ||
+        payload['attempts'] is! List) {
       throw const FormatException('导出文件格式不正确');
     }
-    final List<dynamic> rawSessions = payload['sessions'] is List
-        ? payload['sessions'] as List<dynamic>
-        : <dynamic>[];
-    final List<dynamic> rawAttempts = payload['attempts'] is List
-        ? payload['attempts'] as List<dynamic>
-        : <dynamic>[];
-    final List<TrainingSession> sessions = rawSessions
-        .map((e) => SessionDto.fromJson(e as Map<String, dynamic>).session)
-        .toList();
-    final List<TrainingAttempt> attempts = rawAttempts
-        .map((e) => AttemptDto.fromJson(e as Map<String, dynamic>).attempt)
-        .toList();
-    // 原子替换：先清空流水与统计，再写入导入内容，最后重建统计并落盘。
-    await clearAll();
-    for (final TrainingSession session in sessions) {
-      await _sessions.append(
-        _sessionShard(session.startedAt),
-        SessionDto(session).toJson(),
-      );
+    try {
+      final rawSessions = payload['sessions']! as List<dynamic>;
+      final rawAttempts = payload['attempts']! as List<dynamic>;
+      if (rawSessions.any((e) => e is! Map<String, dynamic>) ||
+          rawAttempts.any((e) => e is! Map<String, dynamic>)) {
+        throw const FormatException('导出文件格式不正确');
+      }
+      final sessionMaps = rawSessions.cast<Map<String, dynamic>>();
+      final attemptMaps = rawAttempts.cast<Map<String, dynamic>>();
+      if (sessionMaps.any((m) =>
+              m['type'] != SessionDto.type ||
+              m['sessionId'] is! String ||
+              m['startedAt'] is! String ||
+              m['configSnapshot'] is! Map) ||
+          attemptMaps.any((m) =>
+              m['type'] != AttemptDto.type ||
+              m['attemptId'] is! String ||
+              m['sessionId'] is! String ||
+              m['createdAt'] is! String ||
+              m['correctInterval'] is! String)) {
+        throw const FormatException('导出文件格式不正确');
+      }
+      final sessions = sessionMaps
+          .map((e) => SessionDto.fromJson(e).session)
+          .toList(growable: false);
+      final attempts = attemptMaps
+          .map((e) => AttemptDto.fromJson(e).attempt)
+          .toList(growable: false);
+      await _replaceTrainingData(sessions, attempts);
+    } on FormatException {
+      rethrow;
+    } on Object {
+      throw const FormatException('导出文件格式不正确');
     }
-    for (final TrainingAttempt attempt in attempts) {
-      await _attempts.append(
-        _attemptShard(attempt.createdAt),
-        AttemptDto(attempt).toJson(),
-      );
-    }
-    await _stats.rebuildFromAttempts(attempts, sessions);
-    await _persistStats();
-    _notify();
   }
+
+  /// 先在同盘临时目录生成完整数据，再用备份回滚的文件级交换提交。
+  Future<void> _replaceTrainingData(
+    List<TrainingSession> sessions,
+    List<TrainingAttempt> attempts,
+  ) async {
+    final Directory dataDir = _fileStore.dir;
+    final String nonce = DateTime.now().microsecondsSinceEpoch.toString();
+    final Directory staging = Directory('${dataDir.path}.import-$nonce');
+    final Directory backup = Directory('${dataDir.path}.backup-$nonce');
+    final staged = TrainingRepositoryImpl(dataDir: staging);
+    bool backupCanBeDeleted = false;
+    try {
+      await staging.create(recursive: true);
+      for (final TrainingSession session in sessions) {
+        await staged._sessions.append(
+          _sessionShard(session.startedAt),
+          SessionDto(session).toJson(),
+        );
+      }
+      for (final TrainingAttempt attempt in attempts) {
+        await staged._attempts.append(
+          _attemptShard(attempt.createdAt),
+          AttemptDto(attempt).toJson(),
+        );
+      }
+      await staged._stats.rebuildFromAttempts(attempts, sessions);
+      await staged._persistStats();
+      await staged.dispose();
+
+      await backup.create(recursive: true);
+      final movedImports = <File>[];
+      try {
+        for (final File file in await _trainingFiles(dataDir)) {
+          await file.rename('${backup.path}/${_basename(file.path)}');
+        }
+        for (final File file in await _trainingFiles(staging)) {
+          movedImports.add(
+            await file.rename('${dataDir.path}/${_basename(file.path)}'),
+          );
+        }
+      } on Object {
+        for (final File file in movedImports) {
+          if (await file.exists()) await file.delete();
+        }
+        for (final File file in await _trainingFiles(backup)) {
+          await file.rename('${dataDir.path}/${_basename(file.path)}');
+        }
+        backupCanBeDeleted = true;
+        rethrow;
+      }
+
+      await _stats.rebuildFromAttempts(attempts, sessions);
+      _pendingRecovery = null;
+      _notify();
+      backupCanBeDeleted = true;
+    } finally {
+      await staged.dispose();
+      if (await staging.exists()) {
+        await staging.delete(recursive: true);
+      }
+      if (backupCanBeDeleted && await backup.exists()) {
+        await backup.delete(recursive: true);
+      }
+    }
+  }
+
+  static Future<List<File>> _trainingFiles(Directory dir) async {
+    if (!await dir.exists()) return <File>[];
+    return dir.listSync().whereType<File>().where((file) {
+      final name = _basename(file.path);
+      return name == AppConfig.statsFileName ||
+          name.startsWith('${_attemptsPrefix}_') ||
+          name.startsWith('${_sessionsPrefix}_');
+    }).toList(growable: false);
+  }
+
+  static String _basename(String path) =>
+      path.replaceAll('\\', '/').split('/').last;
 
   @override
   Future<void> flush() async {

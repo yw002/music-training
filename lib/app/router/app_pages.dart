@@ -31,7 +31,10 @@ AppRoutePages buildFeaturePages(AppDependencies deps) =>
     AppRoutePages.empty().withPages(<String, AppPageBuilder>{
       RouteNames.home: (BuildContext context, Object? arguments) =>
           BlocProvider<HomeCubit>(
-            create: (_) => HomeCubit(trainingRepo: deps.trainingRepo),
+            create: (_) => HomeCubit(
+              trainingRepo: deps.trainingRepo,
+              defaultTimbre: deps.settingsCubit.current.defaultTimbre,
+            ),
             child: const HomePage(),
           ),
       RouteNames.training: (BuildContext context, Object? arguments) =>
@@ -67,7 +70,11 @@ Widget _training(
 }) =>
     BlocProvider<TrainingCubit>(
       create: (_) => TrainingCubit(
-        config: _configFromArgs(arguments, binary: binary),
+        config: _configFromArgs(
+          arguments,
+          binary: binary,
+          defaultTimbre: deps.settingsCubit.current.defaultTimbre,
+        ),
         repository: deps.trainingRepo,
         audio: deps.audio,
         settings: deps.settingsCubit.current,
@@ -87,10 +94,18 @@ Widget _training(
 /// - 直接传 [TrainingConfig] 时原样使用（首页「今日练习」、自由训练页等入口）；
 /// - 否则退化为 [TrainingConfig.defaults]；
 /// - [binary] 为真时强制改为「二选一」模式（取前两个可训练音程）。
-TrainingConfig _configFromArgs(Object? arguments, {required bool binary}) {
+TrainingConfig _configFromArgs(
+  Object? arguments, {
+  required bool binary,
+  required Timbre defaultTimbre,
+}) {
   final TrainingConfig base = arguments is TrainingConfig
       ? arguments
-      : TrainingConfig.defaults;
+      : TrainingConfig.defaults.copyWith(
+          timbreMode: defaultTimbre == Timbre.plucked
+              ? TimbreMode.plucked
+              : TimbreMode.keyboard,
+        );
   if (!binary) {
     return base;
   }

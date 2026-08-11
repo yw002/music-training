@@ -169,7 +169,7 @@ abstract final class AppConfig {
   // ---------------------------------------------------------------------------
 
   /// 桌面窗口最小宽度。
-  static const double desktopMinWidth = 900;
+  static const double desktopMinWidth = 360;
 
   /// 桌面窗口最小高度。
   static const double desktopMinHeight = 640;

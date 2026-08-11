@@ -85,7 +85,10 @@ class AudioSequenceSpec {
   ///
   /// 用于交替对比播放：正确音程与用户所选音程各播一遍（答错后的对比播放）。
   AudioSequenceSpec withInterval(IntervalId other) {
-    return copyWith(targetMidiNote: rootMidiNote + other.semitones);
+    final int signedSemitones = direction == PlaybackDirection.descending
+        ? -other.semitones
+        : other.semitones;
+    return copyWith(targetMidiNote: rootMidiNote + signedSemitones);
   }
 
   /// 复制并覆盖部分字段。
@@ -110,7 +113,6 @@ class AudioSequenceSpec {
   }
 
   @override
-  String toString() =>
-      'AudioSequenceSpec(r$rootMidiNote-t$targetMidiNote, '
+  String toString() => 'AudioSequenceSpec(r$rootMidiNote-t$targetMidiNote, '
       '${direction.storageId}, ${timbre.storageId})';
 }

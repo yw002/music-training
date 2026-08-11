@@ -72,11 +72,16 @@ class AnswerOptionView {
 /// 副作用、不读音频、不碰存储；只从 [TrainingState] 派生 UI 需要的字符串与列表。
 class TrainingViewModel {
   /// 由当前状态构造视图模型。
-  factory TrainingViewModel.from(TrainingState state) => TrainingViewModel._(state);
+  factory TrainingViewModel.from(
+    TrainingState state, {
+    bool showIntervalShorthand = false,
+  }) =>
+      TrainingViewModel._(state, showIntervalShorthand);
 
-  const TrainingViewModel._(this._state);
+  const TrainingViewModel._(this._state, this._showIntervalShorthand);
 
   final TrainingState _state;
+  final bool _showIntervalShorthand;
 
   /// 当前阶段。
   TrainingPhase get phase {
@@ -132,8 +137,7 @@ class TrainingViewModel {
   int get combo => _state is ActiveQuestionState ? _state.combo : 0;
 
   /// 是否允许重播。
-  bool get canReplay =>
-      _state is ActiveQuestionState && _state.canReplay;
+  bool get canReplay => _state is ActiveQuestionState && _state.canReplay;
 
   /// 本题重播次数（仅 awaiting）。
   int get replayCount {
@@ -168,7 +172,8 @@ class TrainingViewModel {
       return AnswerOptionView(
         id: id,
         name: IntervalCatalog.nameOf(id),
-        shorthand: IntervalCatalog.shorthandOf(id),
+        shorthand:
+            _showIntervalShorthand ? IntervalCatalog.shorthandOf(id) : '',
         semitones: id.semitones,
         isCorrect: answered != null && id == correctId,
         isSelected: answered != null && id == selectedId,
@@ -184,7 +189,9 @@ class TrainingViewModel {
     final s = _state;
     if (s is! TrainingAnswered) return '';
     if (s.isUncertain) return AppStrings.feedback.uncertain;
-    return s.isCorrect ? AppStrings.feedback.correct : AppStrings.feedback.wrong;
+    return s.isCorrect
+        ? AppStrings.feedback.correct
+        : AppStrings.feedback.wrong;
   }
 
   /// 反馈语义：success / warning(uncertain) / error。

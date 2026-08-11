@@ -46,7 +46,8 @@ void main() {
       final int noteSamples = (noteMs * sr / 1000).round();
       final int gapSamples = (gapMs * sr / 1000).round();
       final int pcmLen = noteSamples + gapSamples + noteSamples;
-      final int tailSamples = (SequenceBuilder.kTailPaddingMs * sr / 1000).round();
+      final int tailSamples =
+          (SequenceBuilder.kTailPaddingMs * sr / 1000).round();
 
       expect(render.wav.length, WavEncoder.headerBytes + pcmLen * 2);
       // 总时长含尾部 padding。
@@ -79,9 +80,11 @@ void main() {
       expect(_sampleOf(marks[1].at, sr), 0); // noteStart(0)
       expect(marks[1].noteIndex, 0);
       expect(_sampleOf(marks[2].at, sr), noteSamples); // noteEnd(0)
-      expect(_sampleOf(marks[3].at, sr), noteSamples + gapSamples); // noteStart(1)
+      expect(
+          _sampleOf(marks[3].at, sr), noteSamples + gapSamples); // noteStart(1)
       expect(marks[3].noteIndex, 1);
-      expect(_sampleOf(marks[4].at, sr), noteSamples + gapSamples + noteSamples);
+      expect(
+          _sampleOf(marks[4].at, sr), noteSamples + gapSamples + noteSamples);
       expect(marks.last.type, AudioEventType.sequenceEnd);
 
       // 解码后的 PCM 应等于 root + 静音间隔 + target 的拼接。
@@ -115,7 +118,8 @@ void main() {
       final int noteSamples = (noteMs * sr / 1000).round();
       expect(_sampleOf(render.timeline.marks[1].at, sr), 0); // noteStart@0
       expect(render.timeline.marks[1].noteIndex, -1); // 和声两音同响
-      expect(_sampleOf(render.timeline.marks[2].at, sr), noteSamples); // noteEnd
+      expect(
+          _sampleOf(render.timeline.marks[2].at, sr), noteSamples); // noteEnd
 
       final Float32List root =
           PcmSynthesizer.renderNote(60, Timbre.keyboard, noteMs, sr);
@@ -128,11 +132,11 @@ void main() {
     });
   });
 
-  group('SequenceBuilder 下行（noteIndex 交换）', () {
-    test('下行：先响目标（noteIndex=1），后响根音（noteIndex=0）', () {
+  group('SequenceBuilder 下行', () {
+    test('下行：根音为高音，按 root → target 播放', () {
       const AudioSequenceSpec spec = AudioSequenceSpec(
-        rootMidiNote: 60,
-        targetMidiNote: 64,
+        rootMidiNote: 64,
+        targetMidiNote: 60,
         direction: PlaybackDirection.descending,
         timbre: Timbre.keyboard,
         noteDuration: Duration(milliseconds: noteMs),
@@ -142,11 +146,22 @@ void main() {
       final int noteSamples = (noteMs * sr / 1000).round();
       final int gapSamples = (gapMs * sr / 1000).round();
       final List<AudioTimelineMark> marks = render.timeline.marks;
-      // 第一个 noteStart 是目标（高音先响）→ noteIndex 1。
+      // 第一个 noteStart 是根音（高音）。
       expect(marks[1].type, AudioEventType.noteStart);
-      expect(marks[1].noteIndex, 1);
-      expect(marks[3].noteIndex, 0); // 第二个 noteStart 是根音。
+      expect(marks[1].noteIndex, 0);
+      expect(marks[3].noteIndex, 1); // 第二个 noteStart 是目标音。
       expect(_sampleOf(marks[3].at, sr), noteSamples + gapSamples);
+
+      final Float32List pcm = _decodeWav(render.wav);
+      final Float32List expectedRoot =
+          PcmSynthesizer.renderNote(64, Timbre.keyboard, noteMs, sr);
+      final Float32List expectedTarget =
+          PcmSynthesizer.renderNote(60, Timbre.keyboard, noteMs, sr);
+      expect(pcm[100], closeTo(expectedRoot[100], 1e-4));
+      expect(
+        pcm[noteSamples + gapSamples + 100],
+        closeTo(expectedTarget[100], 1e-4),
+      );
     });
   });
 
@@ -180,8 +195,7 @@ void main() {
       // 总样本数 = 4 段 + 3 段间静音 + 尾部 80ms。
       final int tailSamples =
           (SequenceBuilder.kTailPaddingMs * sr / 1000).round();
-      final int totalSamples =
-          4 * pcmPerSeg + 3 * gapBetween + tailSamples;
+      final int totalSamples = 4 * pcmPerSeg + 3 * gapBetween + tailSamples;
       expect(
         render.timeline.total,
         Duration(microseconds: (totalSamples * 1000000 / sr).round()),
