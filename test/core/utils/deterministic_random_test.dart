@@ -67,12 +67,14 @@ void main() {
     test('seed = 0 退化到黄金比常数而不是死循环 0', () {
       final Xorshift32Random rng = Xorshift32Random(seed: 0);
       expect(rng.state, 0x9E3779B9);
-      final List<int> out = <int>[for (int i = 0; i < 10; i++) rng.nextUint32()];
+      final List<int> out = <int>[
+        for (int i = 0; i < 10; i++) rng.nextUint32()
+      ];
       expect(out.every((int v) => v != 0), isTrue);
     });
 
     test('seed 高于 32 位会被掩码', () {
-      final Xorshift32Random a = Xorshift32Random(seed: 0x1_0000_002A);
+      final Xorshift32Random a = Xorshift32Random(seed: 0x10000002A);
       final Xorshift32Random b = Xorshift32Random(seed: 42);
       expect(a.state, b.state);
       expect(a.nextUint32(), b.nextUint32());

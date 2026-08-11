@@ -21,12 +21,15 @@ class HomeCubit extends Cubit<HomeState> {
   /// 创建首页 Cubit。
   HomeCubit({
     required TrainingRepository trainingRepo,
+    Timbre defaultTimbre = Timbre.keyboard,
     DateTime Function()? clock,
   })  : _trainingRepo = trainingRepo,
+        _defaultTimbre = defaultTimbre,
         _clock = clock ?? DateTime.now,
         super(const HomeInitial());
 
   final TrainingRepository _trainingRepo;
+  final Timbre _defaultTimbre;
   final DateTime Function() _clock;
 
   /// 加载统计并计算结果。
@@ -45,9 +48,14 @@ class HomeCubit extends Cubit<HomeState> {
 
     // 今日推荐：零历史退化到第一章（3 个完全协和音程），否则用全量默认值，
     // 自适应加权交给 TrainingCubit（架构 §4.3 边界表）。
-    final TrainingConfig todayConfig = snapshot.isEmpty
+    final TrainingConfig recommendation = snapshot.isEmpty
         ? CourseChapters.one.toConfig(TrainingConfig.defaults)
         : TrainingConfig.defaults;
+    final TrainingConfig todayConfig = recommendation.copyWith(
+      timbreMode: _defaultTimbre == Timbre.plucked
+          ? TimbreMode.plucked
+          : TimbreMode.keyboard,
+    );
 
     final int streak = _computeStreak(snapshot);
 

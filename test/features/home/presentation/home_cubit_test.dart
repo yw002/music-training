@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:interval_ear/features/home/presentation/home_cubit.dart';
 import 'package:interval_ear/features/home/presentation/home_state.dart';
 import 'package:interval_ear/features/training/domain/models/course_preset.dart';
+import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/features/training/domain/models/interval_catalog.dart';
 import 'package:interval_ear/features/training/domain/models/interval_id.dart';
 import 'package:interval_ear/features/training/domain/stats/interval_statistics.dart';
@@ -27,7 +28,8 @@ void main() {
 
     test('empty snapshot degenerates to chapter one and marks all weak',
         () async {
-      when(() => repo.loadStats()).thenAnswer((_) async => StatsSnapshot.empty());
+      when(() => repo.loadStats())
+          .thenAnswer((_) async => StatsSnapshot.empty());
       when(() => repo.takeRecoveryReport()).thenAnswer((_) async => null);
       await cubit.load();
 
@@ -71,7 +73,8 @@ void main() {
     });
 
     test('surfaces recovery dropped lines exactly once', () async {
-      when(() => repo.loadStats()).thenAnswer((_) async => StatsSnapshot.empty());
+      when(() => repo.loadStats())
+          .thenAnswer((_) async => StatsSnapshot.empty());
       when(() => repo.takeRecoveryReport()).thenAnswer(
         (_) async => const RecoveryReport(skippedAttemptLines: 3),
       );
@@ -79,6 +82,24 @@ void main() {
 
       final HomeLoaded loaded = cubit.state as HomeLoaded;
       expect(loaded.recoveryDroppedLines, 3);
+    });
+
+    test('今日练习使用设置中的默认音色', () async {
+      final pluckedCubit = HomeCubit(
+        trainingRepo: repo,
+        defaultTimbre: Timbre.plucked,
+      );
+      when(() => repo.loadStats())
+          .thenAnswer((_) async => StatsSnapshot.empty());
+      when(() => repo.takeRecoveryReport()).thenAnswer((_) async => null);
+
+      await pluckedCubit.load();
+
+      expect(
+        (pluckedCubit.state as HomeLoaded).todayConfig.timbreMode,
+        TimbreMode.plucked,
+      );
+      await pluckedCubit.close();
     });
   });
 }

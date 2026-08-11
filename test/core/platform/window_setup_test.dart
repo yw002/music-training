@@ -271,6 +271,8 @@ void main() {
     });
 
     test('恰好等于最小尺寸可恢复', () {
+      expect(AppConfig.desktopMinWidth, 360);
+      expect(AppConfig.desktopMinHeight, 640);
       expect(
         WindowGeometryController.isRestorable(
           _geometry(

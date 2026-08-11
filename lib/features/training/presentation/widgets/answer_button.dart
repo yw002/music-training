@@ -168,7 +168,8 @@ class _Content extends StatelessWidget {
         SizedBox(height: tokens.space.xxs),
         Text(
           _subtitle(),
-          style: tokens.type.bodySmall?.copyWith(color: primary.withValues(alpha: 0.7)),
+          style: tokens.type.bodySmall
+              ?.copyWith(color: primary.withValues(alpha: 0.7)),
           textAlign: TextAlign.center,
         ),
       ],
@@ -176,7 +177,10 @@ class _Content extends StatelessWidget {
   }
 
   String _subtitle() {
-    final parts = <String>[AppStrings.unit.semitones(option.semitones)];
+    final parts = <String>[
+      if (option.shorthand.isNotEmpty) option.shorthand,
+      AppStrings.unit.semitones(option.semitones),
+    ];
     return parts.join(' · ');
   }
 }

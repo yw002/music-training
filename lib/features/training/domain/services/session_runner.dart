@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:interval_ear/core/utils/math_utils.dart'
-    show MathUtils;
+import 'package:interval_ear/core/utils/math_utils.dart' show MathUtils;
 import 'package:interval_ear/features/training/domain/algorithm_constants.dart';
 import 'package:interval_ear/features/training/domain/models/enums.dart';
 import 'package:interval_ear/features/training/domain/models/id_factory.dart';
@@ -65,14 +64,16 @@ class SessionRunner {
   SessionRunner._({
     required String sessionId,
     required TrainingConfig config,
-    required this._priorSnapshot,
-    required this._random,
+    required StatsSnapshot priorSnapshot,
+    required math.Random random,
     required TrainingMode trainingMode,
     required this.focusPair,
     required this.presetId,
     required DateTime startedAt,
     required SessionPlan plan,
-  })  :         _sessionId = sessionId,
+  })  : _priorSnapshot = priorSnapshot,
+        _random = random,
+        _sessionId = sessionId,
         _config = config,
         _plan = plan,
         _questions = List<IntervalQuestion>.of(plan.questions),
@@ -292,8 +293,7 @@ class SessionRunner {
       scoped.length - kChapterAdvanceMinSessions,
       scoped.length,
     );
-    final sum =
-        tail.fold<double>(0, (acc, s) => acc + s.accuracy);
+    final sum = tail.fold<double>(0, (acc, s) => acc + s.accuracy);
     final average = MathUtils.safeDivide(sum, tail.length);
     return average >= kChapterAdvanceAccuracy;
   }

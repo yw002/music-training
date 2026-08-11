@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:interval_ear/app/app_lifecycle_handler.dart';
 import 'package:interval_ear/app/router/app_router.dart';
 import 'package:interval_ear/core/audio/audio_service.dart';
-import 'package:interval_ear/core/audio/fake_audio_service.dart';
 import 'package:interval_ear/core/audio/soloud_audio_service.dart';
 import 'package:interval_ear/core/constants/app_config.dart';
 import 'package:interval_ear/core/motion/motion_governor.dart';
@@ -46,7 +45,7 @@ class AppDependencies {
   /// 集中式路由器。
   final AppRouter router;
 
-  /// 音频播放服务（生产用 [SoLoudAudioService]，初始化失败降级 [FakeAudioService]）。
+  /// 音频播放服务（生产用 [SoLoudAudioService]，不可用时静音降级）。
   final AudioService audio;
 
   /// 训练数据仓储（JSONL 流水 + stats.json 缓存）。
@@ -90,16 +89,10 @@ class AppDependencies {
     );
     await dataDir.create(recursive: true);
 
-    // 音频：先尝试 SoLoud，初始化失败（引擎不可用）则降级到 Fake（T09 验收 4）。
+    // 音频后端不可用时保留服务的静音降级语义，训练仍可作答。
     final SoLoudAudioService soLoud = SoLoudAudioService();
     await soLoud.initialize();
-    final AudioService audio;
-    if (soLoud.isAvailable) {
-      audio = soLoud;
-    } else {
-      await soLoud.dispose();
-      audio = FakeAudioService();
-    }
+    final AudioService audio = soLoud;
 
     final SettingsRepository settingsRepo = SettingsRepositoryImpl(
       dataDir: dataDir,
@@ -107,7 +100,10 @@ class AppDependencies {
     final TrainingRepository trainingRepo = TrainingRepositoryImpl(
       dataDir: dataDir,
     );
-    final SettingsCubit settingsCubit = SettingsCubit(repository: settingsRepo);
+    final SettingsCubit settingsCubit = SettingsCubit(
+      repository: settingsRepo,
+      onApplied: (settings) => audio.setMasterVolume(settings.volume),
+    );
     // 构造时即加载已保存设置（未保存则为默认值），保证首帧即有正确主题/动效。
     await settingsCubit.load();
 

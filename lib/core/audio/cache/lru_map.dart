@@ -9,10 +9,13 @@ import 'dart:collection';
 /// 并暴露 [length] / [keys] 供单测断言，且避免额外依赖。
 class LruMap<K, V> {
   /// 创建一个容量上限为 [capacity] 的 LRU 映射。
-  LruMap(this.capacity) : assert(capacity > 0, '容量必须为正');
+  LruMap(this.capacity, {this.onEvicted}) : assert(capacity > 0, '容量必须为正');
 
   /// 容量上限（淘汰触发线）。
   final int capacity;
+
+  /// 条目因超容量或清空被移除时的释放回调。
+  final void Function(V value)? onEvicted;
 
   final LinkedHashMap<K, V> _map = LinkedHashMap<K, V>();
 
@@ -27,6 +30,9 @@ class LruMap<K, V> {
 
   /// 全部键（按最近使用从老到新）。
   Iterable<K> get keys => _map.keys;
+
+  /// 全部值（按最近使用从老到新）。
+  Iterable<V> get values => _map.values;
 
   /// 取值；命中则标记为最近使用，未命中返回 `null`。
   V? operator [](K key) {
@@ -48,7 +54,10 @@ class LruMap<K, V> {
     _map[key] = value;
     if (_map.length > capacity) {
       final K oldest = _map.keys.first;
-      _map.remove(oldest);
+      final V? removed = _map.remove(oldest);
+      if (removed != null) {
+        onEvicted?.call(removed);
+      }
     }
   }
 
@@ -56,5 +65,12 @@ class LruMap<K, V> {
   bool containsKey(K key) => _map.containsKey(key);
 
   /// 清空。
-  void clear() => _map.clear();
+  void clear({bool notifyEvicted = true}) {
+    if (notifyEvicted && onEvicted != null) {
+      for (final V value in _map.values) {
+        onEvicted!(value);
+      }
+    }
+    _map.clear();
+  }
 }

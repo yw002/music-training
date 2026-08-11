@@ -135,7 +135,8 @@ void main() {
       );
       await repo.recordAttempt(
         _attempt('s1', IntervalId.minorThird, IntervalId.minorThird,
-            t.add(const Duration(hours: 1)), uncertain: true),
+            t.add(const Duration(hours: 1)),
+            uncertain: true),
       );
       await repo.finishSession(_session('s1', t));
 
@@ -163,7 +164,8 @@ void main() {
       // 在 JSONL 末尾插入一行垃圾，模拟损坏行。
       final file = File('${dir.path}/attempts_2026-04.jsonl');
       expect(file.existsSync(), isTrue);
-      await file.writeAsString('GARBAGE_LINE_NOT_JSON\n', mode: FileMode.append);
+      await file.writeAsString('GARBAGE_LINE_NOT_JSON\n',
+          mode: FileMode.append);
 
       // loadStats 检测到损坏行 → 从流水重建并产出恢复报告。
       await repo.loadStats();
@@ -209,7 +211,8 @@ void main() {
         );
       }
       final sw = Stopwatch()..start();
-      final snapshot = StatsRebuilder.rebuild(attempts, const <TrainingSession>[]);
+      final snapshot =
+          StatsRebuilder.rebuild(attempts, const <TrainingSession>[]);
       sw.stop();
       expect(snapshot.totalQuestions, 10000);
       expect(sw.elapsedMilliseconds, lessThan(2000));
@@ -265,6 +268,60 @@ void main() {
       );
     });
 
+    test('recentSessions 同一 sessionId 只返回最终结算记录', () async {
+      final t = DateTime.utc(2026, 7, 3);
+      final started = _session('same', t, finished: false);
+      await repo.startSession(started);
+      await repo.finishSession(_session('same', t));
+
+      final recent = await repo.recentSessions(10);
+      expect(recent, hasLength(1));
+      expect(recent.single.sessionId, 'same');
+      expect(recent.single.isFinished(), isTrue);
+    });
+
+    test('stats.json 可解析但落后 JSONL 时仍会自动校准', () async {
+      final t = DateTime.utc(2026, 7, 5);
+      final first =
+          _attempt('s1', IntervalId.minorSecond, IntervalId.minorSecond, t);
+      await repo.recordAttempt(first);
+      await repo.finishSession(_session('s1', t));
+
+      final second = _attempt(
+        's2',
+        IntervalId.majorSeventh,
+        IntervalId.majorSeventh,
+        t.add(const Duration(minutes: 10)),
+      );
+      await JsonlAppender(dir: dir).append(
+        'attempts_2026-07.jsonl',
+        AttemptDto(second).toJson(),
+      );
+
+      final restarted = TrainingRepositoryImpl(dataDir: dir);
+      final loaded = await restarted.loadStats();
+      expect(loaded.totalQuestions, 2);
+      expect((await restarted.takeRecoveryReport())?.statsRebuilt, isTrue);
+      await restarted.dispose();
+    });
+
+    test('缺少完整数组的伪导出文件不会清空现有数据', () async {
+      final t = DateTime.utc(2026, 7, 6);
+      await repo.recordAttempt(
+        _attempt('keep', IntervalId.minorSecond, IntervalId.minorSecond, t),
+      );
+      final before = await repo.exportJson();
+
+      await expectLater(
+        repo.importJson(
+          '{"schema":"interval_ear.export","schemaVersion":1}',
+        ),
+        throwsFormatException,
+      );
+
+      expect(await repo.exportJson(), before);
+    });
+
     test('从流水全量重建时同样跳过 aborted 会话', () {
       // 直接打在纯函数上：无论增量累计还是全量重建，aborted 都不进统计，
       // 两条路径的结果因此始终一致（T16 验收 2 的不变式在 T23 后仍成立）。
@@ -301,8 +358,7 @@ void main() {
       }
     });
 
-    test('保存后读回与领域设置完全一致（含 ThemePreference，非 flutter ThemeMode）',
-        () async {
+    test('保存后读回与领域设置完全一致（含 ThemePreference，非 flutter ThemeMode）', () async {
       final settings = AppSettings.defaults.copyWith(
         themeMode: ThemePreference.dark,
         celebrationLevel: CelebrationLevel.rich,

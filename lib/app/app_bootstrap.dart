@@ -109,7 +109,7 @@ abstract final class AppBootstrap {
   ///
   /// 桌面端流程：
   /// 1. `ensureInitialized()`；
-  /// 2. 设最小尺寸 900×640、默认尺寸、居中、标准标题栏、窗口标题；
+  /// 2. 设最小尺寸 360×640（可缩到手机竖屏比例）、默认尺寸与窗口标题；
   /// 3. 在 `show()` **之前** 恢复上次的窗口几何（[configureWindowGeometry]），
   ///    避免「先默认尺寸、再跳到记忆尺寸」的闪跳；
   /// 4. `show()` + `focus()`。

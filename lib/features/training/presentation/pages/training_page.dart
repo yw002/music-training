@@ -212,8 +212,11 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final vm = TrainingViewModel.from(state);
     final cubit = context.read<TrainingCubit>();
+    final vm = TrainingViewModel.from(
+      state,
+      showIntervalShorthand: cubit.settings.showIntervalShorthand,
+    );
     final audio = context.read<AudioService>();
 
     if (state is TrainingInitial || state is TrainingLoading) {
@@ -265,10 +268,16 @@ class _Body extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              AnswerGrid(
-                options: vm.options,
-                enabled: vm.canAnswer,
-                onSelect: (id) => cubit.submitAnswer(id),
+              Semantics(
+                liveRegion: cubit.settings.announcePlayback && isAnswered,
+                label: cubit.settings.announcePlayback && isAnswered
+                    ? vm.feedbackLabel
+                    : null,
+                child: AnswerGrid(
+                  options: vm.options,
+                  enabled: vm.canAnswer,
+                  onSelect: (id) => cubit.submitAnswer(id),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -342,8 +351,10 @@ class _Body extends StatelessWidget {
           color: tokens.color.warning.base,
         ),
         // 章节推进浮层（M-23）：仅在触发章节解锁时短暂展示。
-        if (state is TrainingFinished && (state as TrainingFinished).chapterAdvanced)
-          ChapterAdvanceOverlay(chapterName: (state as TrainingFinished).chapterName),
+        if (state is TrainingFinished &&
+            (state as TrainingFinished).chapterAdvanced)
+          ChapterAdvanceOverlay(
+              chapterName: (state as TrainingFinished).chapterName),
       ],
     );
   }

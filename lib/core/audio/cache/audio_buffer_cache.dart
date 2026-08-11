@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:interval_ear/core/audio/audio_player_backend.dart';
@@ -25,7 +26,12 @@ class AudioBufferCache {
     this.backend,
   })  : _notes = LruMap<String, Float32List>(noteCapacity),
         _sequences = LruMap<String, SequenceRender>(sequenceCapacity),
-        _loaded = LruMap<String, LoadedAudio>(loadedCapacity);
+        _loaded = LruMap<String, LoadedAudio>(
+          loadedCapacity,
+          onEvicted: backend == null
+              ? null
+              : (LoadedAudio audio) => unawaited(backend.unload(audio)),
+        );
 
   /// 播放后端（用于 L3 真正加载到引擎）。`null` 时 L3 用占位 [LoadedAudio]，
   /// 便于纯单测（不依赖 flutter_soloud 原生编译）。
@@ -45,8 +51,8 @@ class AudioBufferCache {
     if (cached != null) {
       return cached;
     }
-    final Float32List pcm =
-        PcmSynthesizer.renderNote(midi, timbre, durationMs, AppConfig.sampleRate);
+    final Float32List pcm = PcmSynthesizer.renderNote(
+        midi, timbre, durationMs, AppConfig.sampleRate);
     _notes[key] = pcm;
     return pcm;
   }
@@ -99,6 +105,19 @@ class AudioBufferCache {
     _notes.clear();
     _sequences.clear();
     _loaded.clear();
+    buildCount = 0;
+  }
+
+  /// 卸载所有原生音源并清空缓存。
+  Future<void> dispose() async {
+    final AudioPlayerBackend? backend = this.backend;
+    final List<LoadedAudio> loaded = _loaded.values.toList(growable: false);
+    _loaded.clear(notifyEvicted: false);
+    if (backend != null) {
+      await Future.wait(loaded.map(backend.unload));
+    }
+    _notes.clear();
+    _sequences.clear();
     buildCount = 0;
   }
 

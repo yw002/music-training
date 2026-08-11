@@ -73,6 +73,7 @@ class TrainingCubit extends Cubit<TrainingState> {
   DateTime? _questionReadyAt;
   PlaybackProgress? _lastProgress;
   StreamSubscription<AudioPlaybackEvent>? _audioSub;
+  bool _isSubmitting = false;
 
   /// 用户设置（UI 读取可视化/庆祝强度）。
   AppSettings get settings => _settings;
@@ -145,7 +146,7 @@ class TrainingCubit extends Cubit<TrainingState> {
     _playCurrent();
   }
 
-  void _playCurrent() {
+  Future<void> _playCurrent() async {
     final runner = _runner;
     if (runner == null) {
       return;
@@ -155,8 +156,10 @@ class TrainingCubit extends Cubit<TrainingState> {
       _finish();
       return;
     }
-    final spec = AudioSequenceSpec.fromQuestion(question, noteGap: _config.noteGap);
-    _audio.playSequence(spec).then((id) {
+    final spec =
+        AudioSequenceSpec.fromQuestion(question, noteGap: _config.noteGap);
+    try {
+      final int id = await _audio.playSequence(spec);
       if (isClosed) {
         return;
       }
@@ -179,10 +182,15 @@ class TrainingCubit extends Cubit<TrainingState> {
           playback: _lastProgress!,
         ),
       );
-    }).catchError((Object e, StackTrace st) {
-      AppLogger.warning('playSequence 失败', tag: 'TrainingCubit', error: e, stackTrace: st);
+      // 加载、起播或后端不可用时，服务会返回 id 但不会进入播放。
+      if (!_audio.isPlaying) {
+        _enterAwaiting();
+      }
+    } on Object catch (e, st) {
+      AppLogger.warning('playSequence 失败',
+          tag: 'TrainingCubit', error: e, stackTrace: st);
       _enterAwaiting();
-    });
+    }
   }
 
   void _onAudioEvent(AudioPlaybackEvent event) {
@@ -272,52 +280,57 @@ class TrainingCubit extends Cubit<TrainingState> {
     required bool isUncertain,
   }) async {
     final runner = _runner;
-    if (runner == null) {
+    if (runner == null || _isSubmitting) {
       return;
     }
-    final responseDuration = _questionReadyAt == null
-        ? Duration.zero
-        : _clock().difference(_questionReadyAt!);
-    final attempt = runner.answer(
-      selectedInterval: selectedInterval,
-      isUncertain: isUncertain,
-      replayCount: _replayCount,
-      responseDuration: responseDuration,
-      now: _clock(),
-    );
-    await _safeRecord(attempt);
-    // T23 验收 ⑥：每答一题都刷新登记处，中途退出时落盘的是**当前进度**，
-    // 而不是开局那一份空快照。
-    _onActiveSessionChanged?.call(runner.session);
-    if (_settings.feedbackSoundEnabled) {
-      _audio.playSfx(attempt.isCorrect ? SfxId.correct : SfxId.wrong);
-    }
-    // 已答的那道题在 answer() 后 cursor 已前进，需取 completedCount-1 下标。
-    final answeredQuestion = runner.questions[runner.completedCount - 1];
-    final isLast = !runner.hasNext;
-    emit(
-      TrainingAnswered(
-        question: answeredQuestion,
-        answerOptions: answeredQuestion.answerOptions,
-        index: runner.completedCount - 1,
-        total: runner.plannedCount + runner.extraDrillCount,
-        combo: runner.combo,
-        canReplay: _config.allowReplay,
-        attempt: attempt,
-        isLast: isLast,
-        chapterAdvanced: false,
-        session: runner.session,
-      ),
-    );
-    if (_settings.autoNext && attempt.isCorrect && !isLast) {
-      final delay = _settings.autoNextDelay;
-      unawaited(
-        Future<void>.delayed(delay).then((_) {
-          if (!isClosed && state is TrainingAnswered) {
-            next();
-          }
-        }),
+    _isSubmitting = true;
+    try {
+      final responseDuration = _questionReadyAt == null
+          ? Duration.zero
+          : _clock().difference(_questionReadyAt!);
+      final attempt = runner.answer(
+        selectedInterval: selectedInterval,
+        isUncertain: isUncertain,
+        replayCount: _replayCount,
+        responseDuration: responseDuration,
+        now: _clock(),
       );
+      await _safeRecord(attempt);
+      // T23 验收 ⑥：每答一题都刷新登记处，中途退出时落盘的是**当前进度**，
+      // 而不是开局那一份空快照。
+      _onActiveSessionChanged?.call(runner.session);
+      if (_settings.feedbackSoundEnabled) {
+        _audio.playSfx(attempt.isCorrect ? SfxId.correct : SfxId.wrong);
+      }
+      // 已答的那道题在 answer() 后 cursor 已前进，需取 completedCount-1 下标。
+      final answeredQuestion = runner.questions[runner.completedCount - 1];
+      final isLast = !runner.hasNext;
+      emit(
+        TrainingAnswered(
+          question: answeredQuestion,
+          answerOptions: answeredQuestion.answerOptions,
+          index: runner.completedCount - 1,
+          total: runner.plannedCount + runner.extraDrillCount,
+          combo: runner.combo,
+          canReplay: _config.allowReplay,
+          attempt: attempt,
+          isLast: isLast,
+          chapterAdvanced: false,
+          session: runner.session,
+        ),
+      );
+      if (_settings.autoNext && attempt.isCorrect && !isLast) {
+        final delay = _settings.autoNextDelay;
+        unawaited(
+          Future<void>.delayed(delay).then((_) {
+            if (!isClosed && state is TrainingAnswered) {
+              next();
+            }
+          }),
+        );
+      }
+    } finally {
+      _isSubmitting = false;
     }
   }
 
@@ -338,7 +351,8 @@ class TrainingCubit extends Cubit<TrainingState> {
     try {
       await _repository.recordAttempt(attempt);
     } on Object catch (e, st) {
-      AppLogger.warning('recordAttempt 失败', tag: 'TrainingCubit', error: e, stackTrace: st);
+      AppLogger.warning('recordAttempt 失败',
+          tag: 'TrainingCubit', error: e, stackTrace: st);
     }
   }
 
@@ -366,7 +380,8 @@ class TrainingCubit extends Cubit<TrainingState> {
     try {
       await _repository.finishSession(session);
     } on Object catch (e, st) {
-      AppLogger.warning('finishSession 失败', tag: 'TrainingCubit', error: e, stackTrace: st);
+      AppLogger.warning('finishSession 失败',
+          tag: 'TrainingCubit', error: e, stackTrace: st);
     }
     // 正常结算完毕：撤销登记，之后再退到后台也不会被误判为「中途退出」。
     _onActiveSessionChanged?.call(null);
@@ -387,10 +402,13 @@ class TrainingCubit extends Cubit<TrainingState> {
       return false;
     }
     try {
-      final recent = await _repository.recentSessions(kChapterAdvanceMinSessions + 4);
-      return SessionRunner.shouldAdvanceChapter(recent, presetId: runner.presetId);
+      final recent =
+          await _repository.recentSessions(kChapterAdvanceMinSessions + 4);
+      return SessionRunner.shouldAdvanceChapter(recent,
+          presetId: runner.presetId);
     } on Object catch (e, st) {
-      AppLogger.warning('章节推进判定失败', tag: 'TrainingCubit', error: e, stackTrace: st);
+      AppLogger.warning('章节推进判定失败',
+          tag: 'TrainingCubit', error: e, stackTrace: st);
       return false;
     }
   }

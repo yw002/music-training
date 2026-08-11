@@ -58,7 +58,8 @@ void main() {
 
     test('update survives a failing save without throwing', () async {
       when(() => repo.load()).thenAnswer((_) async => AppSettings.defaults);
-      when(() => repo.save(any())).thenThrow(const FormatException('disk full'));
+      when(() => repo.save(any()))
+          .thenThrow(const FormatException('disk full'));
       await cubit.load();
 
       final AppSettings next =
@@ -66,6 +67,23 @@ void main() {
       await cubit.update(next);
 
       expect(cubit.current.motionPreference, MotionPreference.off);
+    });
+
+    test('load 和 update 都会立即应用设置副作用', () async {
+      final applied = <AppSettings>[];
+      final callbackCubit = SettingsCubit(
+        repository: repo,
+        onApplied: applied.add,
+      );
+      when(() => repo.load()).thenAnswer((_) async => AppSettings.defaults);
+      when(() => repo.save(any())).thenAnswer((_) async {});
+
+      await callbackCubit.load();
+      final next = AppSettings.defaults.copyWith(volume: 0.25);
+      await callbackCubit.update(next);
+
+      expect(applied, <AppSettings>[AppSettings.defaults, next]);
+      await callbackCubit.close();
     });
   });
 }
